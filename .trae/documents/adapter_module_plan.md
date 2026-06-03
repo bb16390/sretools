@@ -15,6 +15,7 @@
 - aiosqlite>=0.22.1 - 用于异步 SQLite
 - 缺少 Redis 支持
 - 缺少异步 HTTP 支持
+- 缺少时序数据库支持
 
 ---
 
@@ -30,7 +31,9 @@ worker/
 │   ├── __init__.py
 │   ├── base.py              # 基础适配器类和单例管理
 │   ├── http_adapter.py      # 异步 HTTP 请求适配器
-│   ├── sql_adapter.py       # 异步 SQL 查询适配器
+│   ├── sql_adapter.py       # 异步 SQL 查询适配器（关系型数据库）
+│   ├── clickhouse_adapter.py  # 异步 ClickHouse 适配器
+│   ├── influxdb_adapter.py    # 异步 InfluxDB 适配器
 │   └── redis_adapter.py     # 异步 Redis 查询适配器
 └── ...
 ```
@@ -51,6 +54,8 @@ worker/
 - 所有适配器均采用异步实现
 - HTTP 适配器使用 aiohttp
 - SQL 适配器使用 sqlmodel + aiosqlite/asyncpg/aiomysql
+- ClickHouse 适配器使用 clickhouse-connect 或 asynch
+- InfluxDB 适配器使用 influxdb-client-python
 - Redis 适配器使用 redis-py 异步 API
 
 ---
@@ -81,10 +86,10 @@ worker/
 **依赖：**
 - aiohttp>=3.9.0（需要新增）
 
-### 3.3 sql_adapter.py - SQL适配器
+### 3.3 sql_adapter.py - SQL适配器（关系型数据库）
 
 **功能：**
-- 支持多种数据库后端（SQLite、PostgreSQL、MySQL 等）
+- 支持多种关系型数据库后端（SQLite、PostgreSQL、MySQL 等）
 - 异步连接池管理
 - 异步 SQL 执行和结果处理
 - 支持事务管理
@@ -95,7 +100,29 @@ worker/
 - asyncpg（可选，用于 PostgreSQL）
 - aiomysql（可选，用于 MySQL）
 
-### 3.4 redis_adapter.py - Redis适配器
+### 3.4 clickhouse_adapter.py - ClickHouse 适配器
+
+**功能：**
+- 异步连接池
+- 支持 ClickHouse 查询
+- 支持批量插入
+- 支持数据格式转换
+
+**依赖：**
+- asynch>=0.2.0（需要新增）或 clickhouse-connect>=0.7.0
+
+### 3.5 influxdb_adapter.py - InfluxDB 适配器
+
+**功能：**
+- 异步连接池
+- 支持 InfluxDB 查询（Flux 和 InfluxQL）
+- 支持数据写入
+- 支持批量操作
+
+**依赖：**
+- influxdb-client>=1.40.0（需要新增）
+
+### 3.6 redis_adapter.py - Redis适配器
 
 **功能：**
 - 异步连接池
@@ -115,10 +142,12 @@ worker/
 2. `/workspace/worker/adapter/base.py` - 基础适配器和单例管理
 3. `/workspace/worker/adapter/http_adapter.py` - 异步 HTTP 适配器
 4. `/workspace/worker/adapter/sql_adapter.py` - 异步 SQL 适配器
-5. `/workspace/worker/adapter/redis_adapter.py` - 异步 Redis 适配器
+5. `/workspace/worker/adapter/clickhouse_adapter.py` - 异步 ClickHouse 适配器
+6. `/workspace/worker/adapter/influxdb_adapter.py` - 异步 InfluxDB 适配器
+7. `/workspace/worker/adapter/redis_adapter.py` - 异步 Redis 适配器
 
 ### 修改文件
-1. `/workspace/pyproject.toml` - 添加 aiohttp 和 redis 依赖
+1. `/workspace/pyproject.toml` - 添加 aiohttp、redis、asynch（或 clickhouse-connect）、influxdb-client 依赖
 
 ---
 
@@ -140,12 +169,22 @@ worker/
 - 实现异步连接池管理
 - 实现异步查询执行和结果处理
 
-### 步骤 4：Redis适配器实现
+### 步骤 4：ClickHouse 适配器实现
+- 实现异步 ClickHouse 适配器类
+- 实现异步连接池管理
+- 实现查询和写入操作
+
+### 步骤 5：InfluxDB 适配器实现
+- 实现异步 InfluxDB 适配器类
+- 实现异步连接池管理
+- 实现查询和写入操作
+
+### 步骤 6：Redis适配器实现
 - 实现异步 Redis 适配器类
 - 实现异步连接池管理
 - 实现常用 Redis 命令
 
-### 步骤 5：测试和集成
+### 步骤 7：测试和集成
 - 更新 pyproject.toml 添加依赖
 - 编写基本测试用例
 - 验证单例模式和优雅停机
@@ -157,14 +196,16 @@ worker/
 ### 风险点
 1. **单例模式线程安全** - 需要确保多线程环境下单例创建的线程安全
 2. **连接泄漏** - 确保所有连接在关闭时正确清理
-3. **依赖版本兼容性** - 新增 aiohttp 和 redis 依赖需要与现有依赖兼容
+3. **依赖版本兼容性** - 新增多个依赖需要与现有依赖兼容
 4. **异步上下文管理** - 需要正确处理 asyncio 事件循环
+5. **多类型数据库适配** - 需要统一不同数据库的 API 差异
 
 ### 解决方案
 1. 使用 threading.Lock 确保单例创建线程安全
 2. 完善 async close() 方法，使用 try-finally 确保资源释放
-3. 选择稳定版本（aiohttp>=3.9.0, redis>=5.0.0）并测试兼容性
+3. 选择稳定版本并测试兼容性
 4. 统一管理事件循环，提供便捷的获取方式
+5. 提供统一的查询接口，内部处理不同数据库的差异
 
 ---
 
@@ -173,7 +214,9 @@ worker/
 | 功能 | 技术选型 | 说明 |
 |------|---------|------|
 | HTTP 请求 | aiohttp | 异步 HTTP 客户端，高性能 |
-| SQL 操作 | sqlmodel + aiosqlite/asyncpg | 异步 SQL 操作 |
+| 关系型数据库 | sqlmodel + aiosqlite/asyncpg | 异步 SQL 操作 |
+| ClickHouse | asynch | 异步 ClickHouse 客户端 |
+| InfluxDB | influxdb-client | 官方异步客户端 |
 | Redis | redis-py 5.x | 官方推荐，支持异步 API |
 | 单例模式 | 工厂模式+字典缓存 | 灵活且易于扩展 |
 | 优雅停机 | atexit + asyncio | Python 标准库，支持异步清理 |
