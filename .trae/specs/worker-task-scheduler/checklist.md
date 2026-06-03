@@ -1,0 +1,23 @@
+# Checklist
+
+- [ ] BaseTask 抽象基类正确定义了 TaskStatus 枚举（IDLE / RUNNING / PAUSED / STOPPED / FAILED）
+- [ ] BaseTask 包含 `task_id`、`task_type`、`config`、`status` 属性，以及 `start()`、`stop()`、`pause()`、`resume()` 抽象方法
+- [ ] LogCollectorTask 正确封装了 LogCollector，`start()` 启动采集线程，`stop()` 停止线程并清理队列
+- [ ] LogCollectorTask 的 `pause()` / `resume()` 通过 threading.Event 控制采集循环的暂停与恢复
+- [ ] MetricConverterTask 正确封装了 MetricConverter，`start()` 启动转换/聚合线程，`stop()` 停止线程并处理残留数据
+- [ ] MetricConverterTask 的 `pause()` / `resume()` 通过 threading.Event 控制转换循环的暂停与恢复
+- [ ] DatabaseCollectorTask 使用 `croniter` 解析 cron 表达式，在触发时间执行 SQL 查询
+- [ ] DatabaseCollectorTask 利用 AdapterManager.get_or_create() 获取数据库适配器实例
+- [ ] DatabaseCollectorTask 单次执行完成后回调上报任务状态（成功含结果，失败含错误信息）
+- [ ] DatabaseCollectorTask 的 `stop()` 能取消下次调度并等待当前查询完成
+- [ ] TaskScheduler 支持 `create_task()` 根据 task_type 创建对应 Task 实例并自动 `start()`
+- [ ] TaskScheduler 支持 `stop_task()`、`pause_task()`、`resume_task()` 按 task_id 操作
+- [ ] TaskScheduler 支持 `get_task()` 和 `list_tasks()` 查询接口
+- [ ] TaskScheduler 的任务工厂正确注册了三种任务类型（log_collector / metric_converter / database_collector）
+- [ ] `report_task_status()` 生成的上报消息 JSON 格式符合 spec 定义（type、worker_id、task_id、task_type、status、result、duration_ms、timestamp、extra）
+- [ ] 持续运行类任务（LogCollectorTask / MetricConverterTask）按配置间隔（默认30秒）定期上报运行状态
+- [ ] CentralClient 新增 `register_task_scheduler()` 方法，正确持有 TaskScheduler 引用
+- [ ] CentralClient 的 `_handle_task_update()` 能解析 task_create / task_stop / task_pause / task_resume 指令并转发
+- [ ] Worker 主入口 `main.py` 使用 TaskScheduler 驱动，移除了原有模拟主循环
+- [ ] Worker 关闭时（KeyboardInterrupt 或异常）优雅停止所有运行中的任务
+- [ ] 任务状态上报通过 CentralClient 的 `send_websocket_message()` 异步发送
