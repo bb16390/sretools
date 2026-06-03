@@ -68,23 +68,23 @@ class RedisAdapter(AsyncBaseAdapter):
         client = self._get_client()
         return await client.set(name, value, ex=ex, px=px, nx=nx, xx=xx, keepttl=keepttl)
 
-    async def get(self, name: str) -&gt; Optional[Any]:
+    async def get(self, name: str) -> Optional[Any]:
         client = self._get_client()
         return await client.get(name)
 
-    async def delete(self, *names: str) -&gt; int:
+    async def delete(self, *names: str) -> int:
         client = self._get_client()
         return await client.delete(*names)
 
-    async def exists(self, *names: str) -&gt; int:
+    async def exists(self, *names: str) -> int:
         client = self._get_client()
         return await client.exists(*names)
 
-    async def expire(self, name: str, time: int) -&gt; bool:
+    async def expire(self, name: str, time: int) -> bool:
         client = self._get_client()
         return await client.expire(name, time)
 
-    async def ttl(self, name: str) -&gt; int:
+    async def ttl(self, name: str) -> int:
         client = self._get_client()
         return await client.ttl(name)
 
@@ -94,55 +94,55 @@ class RedisAdapter(AsyncBaseAdapter):
         key: Optional[str] = None,
         value: Optional[Any] = None,
         mapping: Optional[Dict[str, Any]] = None
-    ) -&gt; int:
+    ) -> int:
         client = self._get_client()
         return await client.hset(name, key=key, value=value, mapping=mapping)
 
-    async def hget(self, name: str, key: str) -&gt; Optional[Any]:
+    async def hget(self, name: str, key: str) -> Optional[Any]:
         client = self._get_client()
         return await client.hget(name, key)
 
-    async def hgetall(self, name: str) -&gt; Dict[str, Any]:
+    async def hgetall(self, name: str) -> Dict[str, Any]:
         client = self._get_client()
         return await client.hgetall(name)
 
-    async def hdel(self, name: str, *keys: str) -&gt; int:
+    async def hdel(self, name: str, *keys: str) -> int:
         client = self._get_client()
         return await client.hdel(name, *keys)
 
-    async def lpush(self, name: str, *values: Any) -&gt; int:
+    async def lpush(self, name: str, *values: Any) -> int:
         client = self._get_client()
         return await client.lpush(name, *values)
 
-    async def rpush(self, name: str, *values: Any) -&gt; int:
+    async def rpush(self, name: str, *values: Any) -> int:
         client = self._get_client()
         return await client.rpush(name, *values)
 
-    async def lpop(self, name: str, count: Optional[int] = None) -&gt; Optional[Any]:
+    async def lpop(self, name: str, count: Optional[int] = None) -> Optional[Any]:
         client = self._get_client()
         return await client.lpop(name, count=count)
 
-    async def rpop(self, name: str, count: Optional[int] = None) -&gt; Optional[Any]:
+    async def rpop(self, name: str, count: Optional[int] = None) -> Optional[Any]:
         client = self._get_client()
         return await client.rpop(name, count=count)
 
-    async def lrange(self, name: str, start: int, end: int) -&gt; List[Any]:
+    async def lrange(self, name: str, start: int, end: int) -> List[Any]:
         client = self._get_client()
         return await client.lrange(name, start, end)
 
-    async def llen(self, name: str) -&gt; int:
+    async def llen(self, name: str) -> int:
         client = self._get_client()
         return await client.llen(name)
 
-    async def sadd(self, name: str, *values: Any) -&gt; int:
+    async def sadd(self, name: str, *values: Any) -> int:
         client = self._get_client()
         return await client.sadd(name, *values)
 
-    async def smembers(self, name: str) -&gt; set:
+    async def smembers(self, name: str) -> set:
         client = self._get_client()
         return await client.smembers(name)
 
-    async def srem(self, name: str, *values: Any) -&gt; int:
+    async def srem(self, name: str, *values: Any) -> int:
         client = self._get_client()
         return await client.srem(name, *values)
 
@@ -155,7 +155,7 @@ class RedisAdapter(AsyncBaseAdapter):
         ch: bool = False,
         gt: bool = False,
         lt: bool = False
-    ) -&gt; int:
+    ) -> int:
         client = self._get_client()
         return await client.zadd(name, mapping, nx=nx, xx=xx, ch=ch, gt=gt, lt=lt)
 
@@ -171,7 +171,7 @@ class RedisAdapter(AsyncBaseAdapter):
         rev: bool = False,
         offset: Optional[int] = None,
         count: Optional[int] = None
-    ) -&gt; List[Any]:
+    ) -> List[Any]:
         client = self._get_client()
         return await client.zrange(
             name,

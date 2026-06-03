@@ -61,7 +61,7 @@ class SqlAdapter(AsyncBaseAdapter):
         self,
         sql: str,
         params: Optional[Dict[str, Any]] = None
-    ) -&gt; List[Dict[str, Any]]:
+    ) -> List[Dict[str, Any]]:
         session_factory = self._get_session_factory()
         
         async with session_factory() as session:
@@ -78,7 +78,7 @@ class SqlAdapter(AsyncBaseAdapter):
         self,
         sql: str,
         params: Optional[Dict[str, Any]] = None
-    ) -&gt; Optional[Dict[str, Any]]:
+    ) -> Optional[Dict[str, Any]]:
         results = await self.execute(sql, params)
         return results[0] if results else None
 
@@ -86,14 +86,14 @@ class SqlAdapter(AsyncBaseAdapter):
         self,
         sql: str,
         params: Optional[Dict[str, Any]] = None
-    ) -&gt; List[Dict[str, Any]]:
+    ) -> List[Dict[str, Any]]:
         return await self.execute(sql, params)
 
     async def insert(
         self,
         table: str,
         data: Dict[str, Any]
-    ) -&gt; None:
+    ) -> None:
         columns = ', '.join(data.keys())
         placeholders = ', '.join(f':{key}' for key in data.keys())
         sql = f"INSERT INTO {table} ({columns}) VALUES ({placeholders})"
@@ -105,7 +105,7 @@ class SqlAdapter(AsyncBaseAdapter):
         data: Dict[str, Any],
         where: str,
         where_params: Optional[Dict[str, Any]] = None
-    ) -&gt; None:
+    ) -> None:
         set_clause = ', '.join(f'{key} = :{key}' for key in data.keys())
         params = {**data, **(where_params or {})}
         sql = f"UPDATE {table} SET {set_clause} WHERE {where}"
@@ -116,7 +116,7 @@ class SqlAdapter(AsyncBaseAdapter):
         table: str,
         where: str,
         params: Optional[Dict[str, Any]] = None
-    ) -&gt; None:
+    ) -> None:
         sql = f"DELETE FROM {table} WHERE {where}"
         await self.execute(sql, params)
 

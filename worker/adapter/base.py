@@ -5,7 +5,9 @@ import hashlib
 import json
 import threading
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Generic, Optional, Type, TypeVar
+from typing import Any, Dict, Generic, List, Optional, Type, TypeVar
+
+from worker.transformer import TaskRegistry, TransformExecutor
 
 T = TypeVar('T', bound='AsyncBaseAdapter')
 
@@ -24,6 +26,26 @@ class AsyncBaseAdapter(ABC):
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         await self.close()
 
+    async def transform(
+        self,
+        data: Any,
+        task_id: str,
+        config: Optional[Dict[str, Any]] = None
+    ) -> Any:
+        """使用任务ID对数据进行转换"""
+        executor = TransformExecutor()
+        return await executor.execute(task_id, data, config)
+
+    async def transform_chain(
+        self,
+        data: Any,
+        task_ids: List[str],
+        configs: Optional[Dict[str, Dict[str, Any]]] = None
+    ) -> Any:
+        """使用任务链对数据进行顺序转换"""
+        executor = TransformExecutor()
+        return await executor.execute_chain(task_ids, data, configs)
+
 
 class AdapterManager(Generic[T]):
     _instances: Dict[str, T] = {}
@@ -31,7 +53,7 @@ class AdapterManager(Generic[T]):
     _loop: Optional[asyncio.AbstractEventLoop] = None
 
     @classmethod
-    def _generate_key(cls, adapter_type: Type[T], config: Dict[str, Any]) -&gt; str:
+    def _generate_key(cls, adapter_type: Type[T], config: Dict[str, Any]) -> str:
         key_data = {
             'type': adapter_type.__name__,
             'config': config
@@ -40,7 +62,7 @@ class AdapterManager(Generic[T]):
         return hashlib.md5(key_str.encode('utf-8')).hexdigest()
 
     @classmethod
-    def get_or_create(cls, adapter_type: Type[T], config: Dict[str, Any]) -&gt; T:
+    def get_or_create(cls, adapter_type: Type[T], config: Dict[str, Any]) -> T:
         key = cls._generate_key(adapter_type, config)
         
         with cls._lock:
@@ -79,4 +101,3 @@ class AdapterManager(Generic[T]):
 
 
 AdapterManager._setup_atexit()
-

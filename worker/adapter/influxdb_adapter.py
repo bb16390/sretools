@@ -93,7 +93,7 @@ class InfluxDBAdapter(AsyncBaseAdapter):
         self,
         query: str,
         org: Optional[str] = None
-    ) -&gt; List[Dict[str, Any]]:
+    ) -> List[Dict[str, Any]]:
         client = await self._get_client()
         query_api = client.query_api()
         tables = await query_api.query(

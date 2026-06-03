@@ -6,6 +6,13 @@ from .redis_adapter import RedisAdapter
 from .clickhouse_adapter import ClickHouseAdapter
 from .influxdb_adapter import InfluxDBAdapter
 
+from worker.transformer import (
+    TransformScript,
+    TaskRegistry,
+    ScriptLoader,
+    TransformExecutor,
+)
+
 __all__ = [
     'AdapterManager',
     'AsyncBaseAdapter',
@@ -14,5 +21,8 @@ __all__ = [
     'RedisAdapter',
     'ClickHouseAdapter',
     'InfluxDBAdapter',
+    'TransformScript',
+    'TaskRegistry',
+    'ScriptLoader',
+    'TransformExecutor',
 ]
-

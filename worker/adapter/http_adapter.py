@@ -31,7 +31,7 @@ class HttpAdapter(AsyncBaseAdapter):
         
         self._session: Optional[aiohttp.ClientSession] = None
 
-    async def _get_session(self) -&gt; aiohttp.ClientSession:
+    async def _get_session(self) -> aiohttp.ClientSession:
         if self._session is None or self._session.closed:
             timeout = aiohttp.ClientTimeout(total=self.timeout)
             connector = aiohttp.TCPConnector(limit=self.pool_size)
@@ -51,7 +51,7 @@ class HttpAdapter(AsyncBaseAdapter):
         data: Optional[Dict[str, Any]] = None,
         headers: Optional[Dict[str, str]] = None,
         **kwargs
-    ) -&gt; Any:
+    ) -> Any:
         if not HAS_AIOHTTP:
             raise ImportError("aiohttp is required for HttpAdapter")
         
@@ -81,7 +81,7 @@ class HttpAdapter(AsyncBaseAdapter):
                         return await response.text()
             except aiohttp.ClientError as e:
                 last_exception = e
-                if attempt &lt; self.max_retries - 1:
+                if attempt < self.max_retries - 1:
                     await asyncio.sleep(self.retry_delay * (2 ** attempt))
                 else:
                     raise last_exception
@@ -92,7 +92,7 @@ class HttpAdapter(AsyncBaseAdapter):
         params: Optional[Dict[str, Any]] = None,
         headers: Optional[Dict[str, str]] = None,
         **kwargs
-    ) -&gt; Any:
+    ) -> Any:
         return await self._request("GET", url, params=params, headers=headers, **kwargs)
 
     async def post(
@@ -103,7 +103,7 @@ class HttpAdapter(AsyncBaseAdapter):
         params: Optional[Dict[str, Any]] = None,
         headers: Optional[Dict[str, str]] = None,
         **kwargs
-    ) -&gt; Any:
+    ) -> Any:
         return await self._request(
             "POST",
             url,
@@ -122,7 +122,7 @@ class HttpAdapter(AsyncBaseAdapter):
         params: Optional[Dict[str, Any]] = None,
         headers: Optional[Dict[str, str]] = None,
         **kwargs
-    ) -&gt; Any:
+    ) -> Any:
         return await self._request(
             "PUT",
             url,
@@ -139,7 +139,7 @@ class HttpAdapter(AsyncBaseAdapter):
         params: Optional[Dict[str, Any]] = None,
         headers: Optional[Dict[str, str]] = None,
         **kwargs
-    ) -&gt; Any:
+    ) -> Any:
         return await self._request("DELETE", url, params=params, headers=headers, **kwargs)
 
     async def patch(
@@ -150,7 +150,7 @@ class HttpAdapter(AsyncBaseAdapter):
         params: Optional[Dict[str, Any]] = None,
         headers: Optional[Dict[str, str]] = None,
         **kwargs
-    ) -&gt; Any:
+    ) -> Any:
         return await self._request(
             "PATCH",
             url,
