@@ -1,0 +1,183 @@
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI as FastAPIBase
+from fastapi import applications, File, UploadFile, Form
+from fastapi.openapi.docs import (
+    get_swagger_ui_html,
+)
+from fastapi.staticfiles import StaticFiles
+# from prometheus_fastapi_instrumentator import Instrumentator
+from sqlmodel import SQLModel
+from starlette.middleware.cors import CORSMiddleware
+from starlette.responses import RedirectResponse
+
+from index.admin import NavPageAdmin
+from index.file_upload_admin import FileUploadApp
+from core.globals import auth, site
+import logging
+import os
+from logging import FileHandler
+from core.logging import AsyncFileHandler
+from core.settings import settings
+from worker.routes import router as worker_router
+from fastapi_amis_admin.crud.schema import BaseApiOut
+
+# 配置日志系统
+log_dir = os.path.dirname(settings.log_dir)
+if not os.path.exists(log_dir):
+    os.makedirs(log_dir, exist_ok=True)
+
+# 创建 FileHandler
+file_handler = FileHandler(settings.log_dir, encoding='utf-8')
+file_handler.setLevel(getattr(logging, settings.log_level))
+
+# 创建 AsyncFileHandler
+async_file_handler = AsyncFileHandler(file_handler)
+
+# 配置日志格式
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+file_handler.setFormatter(formatter)
+
+# 添加处理器到根日志器
+root_logger = logging.getLogger()
+root_logger.setLevel(getattr(logging, settings.log_level))
+root_logger.addHandler(async_file_handler)
+
+# 创建应用专用日志器
+app_logger = logging.getLogger(__name__)
+
+
+class FastAPI(FastAPIBase):
+    def __init__(self, *args, **kwargs) -> None:
+        if "swagger_js_url" in kwargs:
+            self.swagger_js_url = kwargs.pop("swagger_js_url")
+        if "swagger_css_url" in kwargs:
+            self.swagger_css_url = kwargs.pop("swagger_css_url")
+        if "swagger_favicon_url" in kwargs:
+            self.swagger_favicon_url = kwargs.pop("swagger_favicon_url")
+
+        def get_swagger_ui_html_with_local(*args, **kwargs):
+            return get_swagger_ui_html(
+                *args,
+                **kwargs,
+                swagger_js_url=self.swagger_js_url,
+                swagger_css_url=self.swagger_css_url,
+                swagger_favicon_url=self.swagger_favicon_url,
+            )
+
+        applications.get_swagger_ui_html = get_swagger_ui_html_with_local
+        super(FastAPI, self).__init__(*args, **kwargs)
+
+
+# 添加启动运行事件
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await site.db.async_run_sync(SQLModel.metadata.create_all, is_session=False)
+    # 创建默认管理员,用户名: admin,密码: admin, 请及时修改密码!!!
+    User = await auth.create_role_user("admin")
+    # 创建默认超级管理员,用户名: root,密码: root, 请及时修改密码!!!
+    Root = await auth.create_role_user("root")
+    # 运行site的startup方法,加载casbin策略等
+    await site.router.startup()
+    if not auth.enforcer.enforce("u:admin", site.unique_id, "page", "page"):
+        await auth.enforcer.add_policy(
+            "u:admin", site.unique_id, "page", "page", "allow"
+        )
+        app_logger.info("管理员权限策略添加完成")
+    # 重置采集任务状态
+    # await site.db.async_execute()
+    # await site.db.async_commit()
+
+    # 启动定时任务
+    # scheduler.start()
+    # app_logger.info("定时任务启动完成")
+
+    # # instrumentator.expose(app)
+    # app_logger.info("Prometheus监控暴露完成")
+    app_logger.info("应用启动完成")
+    yield
+    # 启动定时任务
+    # scheduler.shutdown()
+    # app_logger.info("定时任务已关闭")
+    app_logger.info("优雅停机")
+
+
+# 创建FastAPI实例
+app = FastAPI(
+    lifespan=lifespan,
+    debug=settings.debug,
+    swagger_ui_oauth2_redirect_url="/admin/auth/gettoken",
+    swagger_js_url=f"{settings.amis_cdn}/swagger/swagger-ui-bundle.js",
+    swagger_css_url=f"{settings.amis_cdn}/swagger/swagger-ui.css",
+    swagger_favicon_url=f"{settings.amis_cdn}/favicon_b3b0647.png",
+)
+
+
+# 配置静态文件目录
+app.mount("/static", StaticFiles(directory=settings.static_dir), name="static")
+
+# 安装应用manager
+# manager.setup(app)
+
+# 安装应用job
+# job.setup(app)
+
+site.register_admin(NavPageAdmin)
+site.register_admin(FileUploadApp)
+
+# 挂载后台管理系统
+site.mount_app(app)
+
+# 挂载Prometheus客户端
+# instrumentator = Instrumentator().instrument(app)
+
+
+# 文件上传API
+@app.post("/api/file-upload/submit")
+async def file_upload_submit(
+    title: str = Form(...),
+    description: str = Form(""),
+    file: UploadFile = File(None)
+):
+    result = {"title": title, "description": description}
+    
+    if file:
+        file_content = await file.read()
+        result.update({
+            "filename": file.filename,
+            "content_type": file.content_type,
+            "file_size": len(file_content),
+        })
+    
+    return BaseApiOut(data=result, msg="提交成功")
+
+# 注册首页路由
+@app.get("/")
+async def index():
+    return RedirectResponse(url=site.router_path)
+
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.allow_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# 注册worker路由
+app.include_router(worker_router)
+
+if __name__ == "__main__":
+    import uvicorn
+
+    config = uvicorn.Config(
+        "main:app",
+        host=settings.host,
+        port=settings.port,
+        access_log=True,
+        reload=True,
+    )
+    server = uvicorn.Server(config)
+
+    server.run()
