@@ -57,7 +57,7 @@ class ClickHouseAdapter(AsyncBaseAdapter):
         self,
         sql: str,
         params: Optional[Dict[str, Any]] = None
-    ) -&gt; List[Dict[str, Any]]:
+    ) -> List[Dict[str, Any]]:
         pool = await self._get_pool()
         
         async with pool.acquire() as conn:
@@ -70,7 +70,7 @@ class ClickHouseAdapter(AsyncBaseAdapter):
         self,
         sql: str,
         params: Optional[Dict[str, Any]] = None
-    ) -&gt; Optional[Dict[str, Any]]:
+    ) -> Optional[Dict[str, Any]]:
         results = await self.execute(sql, params)
         return results[0] if results else None
 
@@ -78,14 +78,14 @@ class ClickHouseAdapter(AsyncBaseAdapter):
         self,
         sql: str,
         params: Optional[Dict[str, Any]] = None
-    ) -&gt; List[Dict[str, Any]]:
+    ) -> List[Dict[str, Any]]:
         return await self.execute(sql, params)
 
     async def insert(
         self,
         table: str,
         data: List[Dict[str, Any]]
-    ) -&gt; None:
+    ) -> None:
         if not data:
             return
         
