@@ -20,6 +20,11 @@ class Settings:
     central_timeout: int = 10
     central_retry_times: int = 3
     
+    # gRPC 配置
+    grpc_enabled: bool = False  # 是否启用 gRPC
+    grpc_server_address: str = "localhost:50051"  # gRPC 服务地址
+    grpc_only: bool = False  # 是否只使用 gRPC（禁用 HTTP）
+    
     # 日志配置
     log_level: str = "DEBUG"
     log_dir: str = os.path.join(BASE_DIR, "log", "worker.log")
