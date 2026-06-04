@@ -4,12 +4,15 @@ import requests
 import json
 import os
 import asyncio
+import logging
 from typing import List, Dict, Any, Optional
 
 import websockets
 
 from worker.core.settings import settings
 from worker.core.auth import generate_signature
+
+logger = logging.getLogger(__name__)
 
 
 class CentralClient:
@@ -39,6 +42,9 @@ class CentralClient:
         self.ws_reconnect_attempts = 0  # 重连尝试次数
         self.ws_message_handlers = {}
         self.ws_last_reconnect_time = 0  # 上次重连时间
+        
+        # 任务调度器引用（由外部注入）
+        self._task_scheduler = None
         
         # 首次启动注册
         self.register()
@@ -239,6 +245,13 @@ class CentralClient:
             # 尝试加载本地配置
             self.load_config()
 
+    def register_task_scheduler(self, scheduler):
+        """
+        注册任务调度器，用于接收和处理来自 Master 的调度指令
+        """
+        self._task_scheduler = scheduler
+        logger.info("TaskScheduler registered successfully")
+
     def save_config(self, config: Dict[str, Any]):
         """
         保存配置到本地
@@ -379,12 +392,35 @@ class CentralClient:
     
     async def _handle_task_update(self, data):
         """
-        处理任务更新消息
+        处理任务更新消息，解析调度指令并转发到 TaskScheduler
         """
         task = data.get("task")
-        if task:
-            print(f"Received task update: {task}")
-            # 这里可以添加任务处理逻辑
+        if not task:
+            return
+
+        action = task.get("action")
+        config = task.get("config", {})
+
+        logger.info(f"Received task update: action={action}, task={task}")
+
+        if self._task_scheduler is None:
+            logger.warning("TaskScheduler not registered, ignoring task update")
+            return
+
+        if action == "task_create":
+            task_type = task.get("task_type")
+            self._task_scheduler.create_task(task_type, config)
+        elif action == "task_stop":
+            task_id = task.get("task_id")
+            self._task_scheduler.stop_task(task_id)
+        elif action == "task_pause":
+            task_id = task.get("task_id")
+            self._task_scheduler.pause_task(task_id)
+        elif action == "task_resume":
+            task_id = task.get("task_id")
+            self._task_scheduler.resume_task(task_id)
+        else:
+            logger.warning(f"Unknown task action: {action}")
     
     def register_message_handler(self, message_type: str, handler):
         """
