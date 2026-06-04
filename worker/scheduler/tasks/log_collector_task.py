@@ -10,12 +10,13 @@ logger = logging.getLogger(__name__)
 
 class LogCollectorTask(BaseTask):
 
-    def __init__(self, config: dict, task_id: str = None):
+    def __init__(self, config: dict, task_id: str = None, central_client=None):
         super().__init__(
             task_type="log_collector",
             config=config,
             task_id=task_id,
         )
+        self.central_client = central_client
 
     def _default_execution_mode(self) -> ExecutionMode:
         return ExecutionMode.PROCESS
@@ -26,7 +27,7 @@ class LogCollectorTask(BaseTask):
         last_report_time = time.time()
         report_interval = self.config.get("report_interval", 30)
         try:
-            log_collector = LogCollector()
+            log_collector = LogCollector(central_client=self.central_client)
             collect_interval = self.config.get(
                 "collect_interval", settings.log_collect_interval
             )
@@ -43,7 +44,10 @@ class LogCollectorTask(BaseTask):
                     continue
 
                 try:
-                    log_collector.simulate_log_collection()
+                    # 如果 Kafka 没有启用，继续使用模拟收集
+                    if not settings.kafka_enabled:
+                        log_collector.simulate_log_collection()
+                    
                     logger.debug(
                         "LogCollectorTask %s: collected logs, queue size: %d",
                         self.task_id,

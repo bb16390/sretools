@@ -49,6 +49,19 @@ class Settings:
     # 安全配置
     api_key: str = ""
     secret_key: str = "your-secret-key-here"
+    
+    # Kafka 配置
+    kafka_enabled: bool = False
+    kafka_brokers: str = "localhost:9092"
+    kafka_group_id: str = "log-collector-group"
+    kafka_topics: list = ["logs"]
+    kafka_auto_offset_reset: str = "earliest"
+    kafka_enable_auto_commit: bool = False
+    kafka_consumer_config: dict = {}
+    
+    # 消费进度配置
+    kafka_offset_report_interval: int = 30  # 秒
+    kafka_offset_file_path: str = "kafka_offsets.json"
 
 
 settings = Settings()

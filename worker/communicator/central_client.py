@@ -460,7 +460,7 @@ class CentralClient:
     
     async def send_websocket_message(self, message: Dict[str, Any]):
         """
-        发送WebSocket消息
+        发送 WebSocket 消息
         """
         if self.ws_connected and self.ws_client:
             try:
@@ -471,3 +471,22 @@ class CentralClient:
                 self.ws_connected = False
                 self.ws_client = None
         return False
+    
+    def report_kafka_offsets(self, offsets: Dict[str, Dict[int, int]]):
+        """
+        上报 Kafka 消费进度到 Master 端
+        """
+        data = {
+            "worker_id": settings.worker_id,
+            "offsets": offsets
+        }
+        return self._send_request("/api/worker/kafka-offsets", data)
+    
+    def get_kafka_offsets(self) -> Optional[Dict[str, Any]]:
+        """
+        从 Master 端获取 Kafka 消费进度
+        """
+        response = self._send_request(f"/api/worker/kafka-offsets/{settings.worker_id}", method="GET")
+        if response and response.get("status") == "success":
+            return response.get("data")
+        return None

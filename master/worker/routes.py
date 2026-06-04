@@ -26,8 +26,11 @@ worker_config = {
     "metric_batch_size": 500
 }
 
-# 存储worker任务
+# 存储 worker 任务
 worker_tasks = {}
+
+# 存储 Kafka 消费进度
+kafka_offsets = {}
 
 class ConnectionManager:
     def __init__(self):
@@ -309,5 +312,54 @@ def update_worker_task(data: Dict[str, Any]):
     return {
         "status": "success",
         "message": f"Task updated for worker {worker_id}",
+        "timestamp": time.time()
+    }
+
+
+@router.post("/kafka-offsets")
+def report_kafka_offsets(data: Dict[str, Any]):
+    """
+    接收并存储 Worker 上报的 Kafka 消费进度
+    """
+    # 验证签名
+    signature = data.pop("signature", None)
+    if not signature or not verify_signature(data, signature, SECRET_KEY):
+        raise HTTPException(status_code=401, detail="Invalid signature")
+    
+    worker_id = data.get("worker_id")
+    offsets = data.get("offsets")
+    
+    if not worker_id:
+        raise HTTPException(status_code=400, detail="worker_id is required")
+    if not offsets:
+        raise HTTPException(status_code=400, detail="offsets are required")
+    
+    # 存储消费进度
+    kafka_offsets[worker_id] = {
+        "worker_id": worker_id,
+        "offsets": offsets,
+        "timestamp": time.time()
+    }
+    
+    print(f"Received Kafka offsets from worker {worker_id}: {offsets}")
+    
+    return {
+        "status": "success",
+        "message": "Kafka offsets stored successfully",
+        "timestamp": time.time()
+    }
+
+
+@router.get("/kafka-offsets/{worker_id}")
+def get_kafka_offsets(worker_id: str):
+    """
+    获取指定 Worker 的 Kafka 消费进度
+    """
+    if worker_id not in kafka_offsets:
+        raise HTTPException(status_code=404, detail="Kafka offsets not found for this worker")
+    
+    return {
+        "status": "success",
+        "data": kafka_offsets[worker_id],
         "timestamp": time.time()
     }
