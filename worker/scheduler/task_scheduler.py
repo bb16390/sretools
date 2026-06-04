@@ -16,6 +16,7 @@ class TaskScheduler:
         self._task_factory: Dict[str, Type[BaseTask]] = {}
         self._lock = threading.Lock()
         self._central_client = central_client
+        self._trade_day_cache = None
 
         # 进程存活监控
         self._monitor_thread: Optional[threading.Thread] = None
@@ -48,7 +49,12 @@ class TaskScheduler:
             temp_instance = task_cls(task_type=task_type, config=config)
             config["execution_mode"] = temp_instance._default_execution_mode().value
 
-        task = task_cls(task_type=task_type, config=config)
+        # 为 DatabaseCollectorTask 传递 trade_day_cache
+        from worker.scheduler.tasks import DatabaseCollectorTask
+        if task_cls is DatabaseCollectorTask and self._trade_day_cache is not None:
+            task = task_cls(task_type=task_type, config=config, trade_day_cache=self._trade_day_cache)
+        else:
+            task = task_cls(task_type=task_type, config=config)
         task.set_status_callback(self._on_task_status)
 
         with self._lock:

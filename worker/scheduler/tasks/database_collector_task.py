@@ -64,8 +64,10 @@ class DatabaseCollectorTask(BaseTask):
         task_type: str,
         config: Dict[str, Any],
         task_id: str = None,
+        trade_day_cache=None,
     ):
         super().__init__(task_type, config, task_id)
+        self._trade_day_cache = trade_day_cache
         self._validate_config()
 
     def _validate_config(self):
@@ -113,6 +115,19 @@ class DatabaseCollectorTask(BaseTask):
 
                 now = datetime.now()
                 if now >= next_time:
+                    # Check trade day if configured
+                    trade_day_only = self.config.get("trade_day_only", False)
+                    if trade_day_only and self._trade_day_cache:
+                        if not self._trade_day_cache.is_trade_day(now.date()):
+                            logger.info(
+                                "DatabaseCollectorTask[%s] skipped: not a trade day",
+                                self.task_id,
+                            )
+                            cron = croniter(cron_expression, now)
+                            next_time = cron.get_next(datetime)
+                            self._stop_event.wait(timeout=1)
+                            continue
+
                     start_time = time.time()
                     try:
                         adapter = AdapterManager.get_or_create(adapter_cls, adapter_config)
