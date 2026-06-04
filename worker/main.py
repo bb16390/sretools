@@ -10,6 +10,7 @@ from worker.collector.log_collector import LogCollector
 from worker.metrics.metric_converter import MetricConverter
 from worker.communicator.central_client import CentralClient
 from worker.scheduler.task_scheduler import TaskScheduler
+from worker.scheduler.trade_day_cache import TradeDayCache
 from worker.scheduler.tasks import LogCollectorTask, MetricConverterTask, DatabaseCollectorTask
 
 # 配置日志系统
@@ -49,6 +50,18 @@ class Worker:
             # 初始化任务调度器
             self.scheduler = TaskScheduler(central_client=self.central_client)
             app_logger.info("TaskScheduler created")
+
+            # 初始化交易日缓存
+            self.trade_day_cache = TradeDayCache(self.central_client)
+            app_logger.info("TradeDayCache initialized")
+
+            # 设置交易日缓存到中心端客户端
+            self.central_client.set_trade_day_cache(self.trade_day_cache)
+            app_logger.info("TradeDayCache set on central client")
+
+            # 将交易日缓存传递给调度器
+            self.scheduler._trade_day_cache = self.trade_day_cache
+            app_logger.info("TradeDayCache set on scheduler")
             
             # 注册调度器到中心端客户端
             self.central_client.register_task_scheduler(self.scheduler)

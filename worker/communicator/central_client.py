@@ -46,6 +46,9 @@ class CentralClient:
         # 任务调度器引用（由外部注入）
         self._task_scheduler = None
         
+        # 交易日缓存引用（由外部注入）
+        self._trade_day_cache = None
+        
         # 首次启动注册
         self.register()
         
@@ -252,6 +255,12 @@ class CentralClient:
         self._task_scheduler = scheduler
         logger.info("TaskScheduler registered successfully")
 
+    def set_trade_day_cache(self, cache):
+        """
+        设置交易日缓存引用
+        """
+        self._trade_day_cache = cache
+
     def save_config(self, config: Dict[str, Any]):
         """
         保存配置到本地
@@ -347,6 +356,7 @@ class CentralClient:
                 # 注册默认消息处理器
                 self.register_message_handler("config_update", self._handle_config_update)
                 self.register_message_handler("task_update", self._handle_task_update)
+                self.register_message_handler("trade_day_data", self._handle_trade_day_data)
                 
                 # 持续接收消息
                 while True:
@@ -421,6 +431,17 @@ class CentralClient:
             self._task_scheduler.resume_task(task_id)
         else:
             logger.warning(f"Unknown task action: {action}")
+    
+    async def _handle_trade_day_data(self, data):
+        """
+        处理交易日数据消息
+        """
+        trade_days = data.get("trade_days", [])
+        if trade_days:
+            from datetime import datetime
+            dates = [datetime.strptime(day, "%Y-%m-%d").date() for day in trade_days]
+            if self._trade_day_cache:
+                self._trade_day_cache.update_trade_days(dates)
     
     def register_message_handler(self, message_type: str, handler):
         """
