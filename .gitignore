@@ -8,3 +8,14 @@ wheels/
 
 # Virtual environments
 .venv
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# macOS
+.DS_Store
+
+# Log files
+*.log
