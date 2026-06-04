@@ -1,0 +1,196 @@
+syntax = "proto3";
+
+package worker;
+
+// Worker Service definition - Full Master-Worker Communication
+service WorkerService {
+  // Register a worker with the master
+  rpc RegisterWorker(RegisterRequest) returns (RegisterResponse);
+  
+  // Send heartbeat from worker to master
+  rpc SendHeartbeat(HeartbeatRequest) returns (HeartbeatResponse);
+  
+  // Send logs from worker to master (client streaming)
+  rpc SendLogs(stream LogEntry) returns (SendLogsResponse);
+  
+  // Send metrics from worker to master (client streaming)
+  rpc SendMetrics(stream MetricEntry) returns (SendMetricsResponse);
+  
+  // Get configuration from master
+  rpc GetConfig(GetConfigRequest) returns (GetConfigResponse);
+  
+  // Health check
+  rpc HealthCheck(HealthCheckRequest) returns (HealthCheckResponse);
+  
+  // Bidirectional streaming for real-time communication (replaces WebSocket)
+  rpc Communicate(stream WorkerMessage) returns (stream MasterMessage);
+}
+
+// Worker info message
+message WorkerInfo {
+  string version = 1;
+  string host = 2;
+  int32 port = 3;
+  double timestamp = 4;
+}
+
+// Register request
+message RegisterRequest {
+  string worker_id = 1;
+  WorkerInfo info = 2;
+  string signature = 3;
+}
+
+// Register response
+message RegisterResponse {
+  bool success = 1;
+  string message = 2;
+  string worker_id = 3;
+  map<string, string> config = 4;
+  double timestamp = 5;
+}
+
+// Heartbeat request
+message HeartbeatRequest {
+  string worker_id = 1;
+  string status = 2;
+  double timestamp = 3;
+  string signature = 4;
+}
+
+// Heartbeat response
+message HeartbeatResponse {
+  bool success = 1;
+  string message = 2;
+  double timestamp = 3;
+}
+
+// Log entry
+message LogEntry {
+  string worker_id = 1;
+  string level = 2;
+  string message = 3;
+  string source = 4;
+  double timestamp = 5;
+  map<string, string> metadata = 6;
+}
+
+// Send logs response
+message SendLogsResponse {
+  bool success = 1;
+  string message = 2;
+  int32 received_count = 3;
+  double timestamp = 4;
+}
+
+// Metric entry
+message MetricEntry {
+  string worker_id = 1;
+  string name = 2;
+  double value = 3;
+  string unit = 4;
+  double timestamp = 5;
+  map<string, string> labels = 6;
+}
+
+// Send metrics response
+message SendMetricsResponse {
+  bool success = 1;
+  string message = 2;
+  int32 received_count = 3;
+  double timestamp = 4;
+}
+
+// Get config request
+message GetConfigRequest {
+  string worker_id = 1;
+}
+
+// Get config response
+message GetConfigResponse {
+  bool success = 1;
+  map<string, string> config = 2;
+  double timestamp = 3;
+}
+
+// Health check request
+message HealthCheckRequest {
+  string service = 1;
+}
+
+// Health check response
+message HealthCheckResponse {
+  enum ServingStatus {
+    UNKNOWN = 0;
+    SERVING = 1;
+    NOT_SERVING = 2;
+  }
+  ServingStatus status = 1;
+  double timestamp = 2;
+}
+
+// Worker message (sent from worker to master via bidirectional stream)
+message WorkerMessage {
+  oneof message_type {
+    ConfigAck config_ack = 1;
+    TaskStatus task_status = 2;
+    Ping ping = 3;
+  }
+}
+
+// Master message (sent from master to worker via bidirectional stream)
+message MasterMessage {
+  oneof message_type {
+    ConfigUpdate config_update = 1;
+    TaskUpdate task_update = 2;
+    TradeDayData trade_day_data = 3;
+    Pong pong = 4;
+  }
+}
+
+// Configuration acknowledgment
+message ConfigAck {
+  bool received = 1;
+  double timestamp = 2;
+}
+
+// Task status update
+message TaskStatus {
+  string task_id = 1;
+  string status = 2;
+  string message = 3;
+  double timestamp = 4;
+}
+
+// Ping message
+message Ping {
+  int32 sequence = 1;
+  double timestamp = 2;
+}
+
+// Configuration update
+message ConfigUpdate {
+  map<string, string> config = 1;
+  double timestamp = 2;
+}
+
+// Task update
+message TaskUpdate {
+  string task_id = 1;
+  string action = 2; // "create", "stop", "pause", "resume"
+  string task_type = 3;
+  map<string, string> config = 4;
+  double timestamp = 5;
+}
+
+// Trade day data
+message TradeDayData {
+  repeated string trade_days = 1;
+  double timestamp = 2;
+}
+
+// Pong message
+message Pong {
+  int32 sequence = 1;
+  double timestamp = 2;
+}

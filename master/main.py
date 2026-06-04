@@ -1,4 +1,5 @@
 from contextlib import asynccontextmanager
+import threading
 
 from fastapi import FastAPI as FastAPIBase
 from fastapi import applications, File, UploadFile, Form
@@ -16,11 +17,20 @@ from index.file_upload_admin import FileUploadApp
 from core.globals import auth, site
 import logging
 import os
+import sys
 from logging import FileHandler
 from core.logging import AsyncFileHandler
 from core.settings import settings
 from worker.routes import router as worker_router
 from fastapi_amis_admin.crud.schema import BaseApiOut
+
+# 添加 gRPC 相关导入
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "grpc"))
+try:
+    from server import start_grpc_server
+    GRPC_AVAILABLE = True
+except ImportError:
+    GRPC_AVAILABLE = False
 
 # 配置日志系统
 log_dir = os.path.dirname(settings.log_dir)
@@ -94,6 +104,22 @@ async def lifespan(app: FastAPI):
 
     # # instrumentator.expose(app)
     # app_logger.info("Prometheus监控暴露完成")
+    
+    # 启动 gRPC 服务（如果可用）
+    if GRPC_AVAILABLE:
+        try:
+            # 在后台线程中启动 gRPC 服务
+            grpc_thread = threading.Thread(
+                target=lambda: start_grpc_server(port=50051, daemon=True),
+                daemon=True
+            )
+            grpc_thread.start()
+            app_logger.info("gRPC 服务已启动，端口: 50051")
+        except Exception as e:
+            app_logger.error(f"启动 gRPC 服务失败: {e}")
+    else:
+        app_logger.info("gRPC 服务模块不可用，跳过启动")
+    
     app_logger.info("应用启动完成")
     yield
     # 启动定时任务
