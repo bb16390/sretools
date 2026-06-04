@@ -1,5 +1,6 @@
 import os
 import sys
+import time
 import logging
 from logging import FileHandler
 
@@ -8,6 +9,8 @@ from worker.core.logging import AsyncFileHandler
 from worker.collector.log_collector import LogCollector
 from worker.metrics.metric_converter import MetricConverter
 from worker.communicator.central_client import CentralClient
+from worker.scheduler.task_scheduler import TaskScheduler
+from worker.scheduler.tasks import LogCollectorTask, MetricConverterTask, DatabaseCollectorTask
 
 # 配置日志系统
 log_dir = os.path.dirname(settings.log_dir)
@@ -43,6 +46,28 @@ class Worker:
             self.central_client = CentralClient()
             app_logger.info(f"Central client initialized with servers: {settings.central_servers}")
             
+            # 初始化任务调度器
+            self.scheduler = TaskScheduler(central_client=self.central_client)
+            app_logger.info("TaskScheduler created")
+            
+            # 注册调度器到中心端客户端
+            self.central_client.register_task_scheduler(self.scheduler)
+            app_logger.info("TaskScheduler registered with central client")
+            
+            # 注册任务类型到调度器工厂
+            self.scheduler.register_task_type("log_collector", LogCollectorTask)
+            self.scheduler.register_task_type("metric_converter", MetricConverterTask)
+            self.scheduler.register_task_type("database_collector", DatabaseCollectorTask)
+            app_logger.info("Task types registered with scheduler factory")
+            
+            # 设置 worker_id
+            self.scheduler._worker_id = settings.worker_id
+            app_logger.info(f"Scheduler worker_id set to: {settings.worker_id}")
+            
+            # 启动进程监控
+            self.scheduler._start_monitor()
+            app_logger.info("Process monitor started")
+            
             # 初始化日志收集器
             self.log_collector = LogCollector()
             app_logger.info("Log collector initialized")
@@ -62,14 +87,14 @@ class Worker:
         # 主循环
         try:
             while True:
-                # 这里可以添加定期任务
-                # 例如：发送日志和指标到中心端
-                import time
-                time.sleep(10)
+                time.sleep(60)
         except KeyboardInterrupt:
             app_logger.info("Worker stopped by user")
+            self.scheduler.shutdown()
         except Exception as e:
             app_logger.error(f"Worker error: {e}")
+            self.scheduler.shutdown()
+            raise
 
 
 if __name__ == "__main__":

@@ -19,6 +19,7 @@ dependencies = [
     "sqlalchemy>=2.0.0",
     "sqlmodel==0.0.19",
     "sqlmodelx==0.0.12",
+    "croniter>=2.0.0",
     "websockets>=12.0",
 ]
 
