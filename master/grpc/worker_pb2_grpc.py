@@ -3,7 +3,7 @@
 import grpc
 import warnings
 
-from . import worker_pb2 as worker__pb2
+import worker_pb2 as worker__pb2
 
 GRPC_GENERATED_VERSION = '1.81.0'
 GRPC_VERSION = grpc.__version__
@@ -26,7 +26,7 @@ if _version_not_supported:
 
 
 class WorkerServiceStub:
-    """Worker Service definition
+    """Worker Service definition - Full Master-Worker Communication
     """
 
     def __init__(self, channel):
@@ -73,7 +73,7 @@ class WorkerServiceStub:
 
 
 class WorkerServiceServicer:
-    """Worker Service definition
+    """Worker Service definition - Full Master-Worker Communication
     """
 
     def RegisterWorker(self, request, context):
@@ -119,7 +119,7 @@ class WorkerServiceServicer:
         raise NotImplementedError('Method not implemented!')
 
     def Communicate(self, request_iterator, context):
-        """Bidirectional streaming for real-time communication
+        """Bidirectional streaming for real-time communication (replaces WebSocket)
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -172,7 +172,7 @@ def add_WorkerServiceServicer_to_server(servicer, server):
 
  # This class is part of an EXPERIMENTAL API.
 class WorkerService:
-    """Worker Service definition
+    """Worker Service definition - Full Master-Worker Communication
     """
 
     @staticmethod

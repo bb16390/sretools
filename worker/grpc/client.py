@@ -1,29 +1,50 @@
 """
-gRPC Client implementation for Worker.
+gRPC Client implementation for Worker - Master Communication.
+This can work in parallel with the existing HTTP/REST client.
 """
 
 import time
 import grpc
 import threading
-from typing import Dict, Any, Optional, List, Iterator
+import sys
+import os
+from typing import Dict, Any, List, Optional
 
-from worker.grpc import worker_pb2
-from worker.grpc import worker_pb2_grpc
-from worker.core.settings import settings
-from worker.core.auth import generate_signature
+# Add the current directory to path for gRPC modules
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+try:
+    from worker.core.settings import settings
+    from worker.core.auth import generate_signature
+except ImportError:
+    # Fallback if not running in the full project context
+    class Settings:
+        worker_id = "test-worker-001"
+        version = "1.0.0"
+        host = "localhost"
+        port = 5001
+    settings = Settings()
+    
+    def generate_signature(data):
+        return "dummy-signature"
+
+import worker_pb2
+import worker_pb2_grpc
 
 
 class CentralGrpcClient:
-    """gRPC client for communicating with master."""
+    """gRPC Client for Worker communication with Master."""
     
     def __init__(self, server_address: str = "localhost:50051"):
         self.server_address = server_address
         self.channel = None
         self.stub = None
-        self.connected = False
         self.registered = False
         
-        # Create channel and stub
+        # Streaming state
+        self._communicate_thread = None
+        self._communicate_running = False
+        
         self._connect()
     
     def _connect(self):
@@ -31,25 +52,29 @@ class CentralGrpcClient:
         try:
             self.channel = grpc.insecure_channel(self.server_address)
             self.stub = worker_pb2_grpc.WorkerServiceStub(self.channel)
-            self.connected = True
-            print(f"Connected to gRPC server at {self.server_address}")
+            print(f"[gRPC] Connected to master at {self.server_address}")
         except Exception as e:
-            print(f"Failed to connect to gRPC server: {e}")
-            self.connected = False
+            print(f"[gRPC] Failed to connect to master: {e}")
     
     def close(self):
         """Close the connection."""
+        self._stop_communicate_stream()
         if self.channel:
             self.channel.close()
-            self.connected = False
-            print("gRPC connection closed")
+            print("[gRPC] Connection closed")
     
-    def register_worker(self) -> bool:
-        """Register worker with master."""
-        if not self.connected:
-            print("Not connected to server")
+    def health_check(self) -> bool:
+        """Check if master is healthy."""
+        try:
+            request = worker_pb2.HealthCheckRequest(service="worker")
+            response = self.stub.HealthCheck(request)
+            return response.status == worker_pb2.HealthCheckResponse.SERVING
+        except Exception as e:
+            print(f"[gRPC] Health check failed: {e}")
             return False
-        
+    
+    def register(self) -> bool:
+        """Register worker with master."""
         try:
             worker_info = worker_pb2.WorkerInfo(
                 version=settings.version,
@@ -80,26 +105,21 @@ class CentralGrpcClient:
             
             if response.success:
                 self.registered = True
-                print(f"Successfully registered as {response.worker_id}")
-                # Save config
+                print(f"[gRPC] ✓ Worker {settings.worker_id} registered successfully")
                 if response.config:
-                    print("Received config:", response.config)
+                    print(f"[gRPC]   Received config: {dict(response.config)}")
                 return True
             else:
-                print(f"Registration failed: {response.message}")
+                print(f"[gRPC] Registration failed: {response.message}")
                 return False
-        
+                
         except Exception as e:
-            print(f"Error registering worker: {e}")
+            print(f"[gRPC] Error registering worker: {e}")
             return False
     
     def send_heartbeat(self, status: str = "running") -> bool:
         """Send heartbeat to master."""
-        if not self.connected:
-            return False
-        
         try:
-            # Generate signature
             data_to_sign = {
                 "worker_id": settings.worker_id,
                 "status": status,
@@ -116,16 +136,13 @@ class CentralGrpcClient:
             
             response = self.stub.SendHeartbeat(request)
             return response.success
-        
+            
         except Exception as e:
-            print(f"Error sending heartbeat: {e}")
+            print(f"[gRPC] Error sending heartbeat: {e}")
             return False
     
     def send_logs(self, logs: List[Dict[str, Any]]) -> bool:
         """Send logs to master (client streaming)."""
-        if not self.connected:
-            return False
-        
         try:
             def log_generator():
                 for log in logs:
@@ -133,149 +150,156 @@ class CentralGrpcClient:
                         worker_id=settings.worker_id,
                         level=log.get("level", "INFO"),
                         message=log.get("message", ""),
-                        source=log.get("source", "unknown"),
+                        source=log.get("source", "worker"),
                         timestamp=log.get("timestamp", time.time()),
                         metadata=log.get("metadata", {})
                     )
             
             response = self.stub.SendLogs(log_generator())
-            print(f"Sent {response.received_count} logs")
+            print(f"[gRPC] ✓ Sent {response.received_count} logs")
             return response.success
-        
+            
         except Exception as e:
-            print(f"Error sending logs: {e}")
+            print(f"[gRPC] Error sending logs: {e}")
             return False
     
     def send_metrics(self, metrics: List[Dict[str, Any]]) -> bool:
         """Send metrics to master (client streaming)."""
-        if not self.connected:
-            return False
-        
         try:
             def metric_generator():
                 for metric in metrics:
                     yield worker_pb2.MetricEntry(
-                        worker_id=settings.worker_id,
-                        name=metric.get("name", ""),
-                        value=metric.get("value", 0.0),
-                        unit=metric.get("unit", ""),
-                        timestamp=metric.get("timestamp", time.time()),
-                        labels=metric.get("labels", {})
-                    )
+                    worker_id=settings.worker_id,
+                    name=metric.get("name", ""),
+                    value=metric.get("value", 0.0),
+                    unit=metric.get("unit", ""),
+                    timestamp=metric.get("timestamp", time.time()),
+                    labels=metric.get("labels", {})
+                )
             
             response = self.stub.SendMetrics(metric_generator())
-            print(f"Sent {response.received_count} metrics")
+            print(f"[gRPC] ✓ Sent {response.received_count} metrics")
             return response.success
-        
+            
         except Exception as e:
-            print(f"Error sending metrics: {e}")
+            print(f"[gRPC] Error sending metrics: {e}")
             return False
     
     def get_config(self) -> Optional[Dict[str, str]]:
         """Get configuration from master."""
-        if not self.connected:
-            return None
-        
         try:
             request = worker_pb2.GetConfigRequest(worker_id=settings.worker_id)
             response = self.stub.GetConfig(request)
-            
             if response.success:
                 return dict(response.config)
             return None
-        
         except Exception as e:
-            print(f"Error getting config: {e}")
+            print(f"[gRPC] Error getting config: {e}")
             return None
     
-    def health_check(self) -> bool:
-        """Check if master is healthy."""
-        if not self.connected:
-            return False
-        
+    def _start_communicate_stream(self):
+        """Internal method to run the bidirectional stream."""
         try:
-            request = worker_pb2.HealthCheckRequest(service="worker")
-            response = self.stub.HealthCheck(request)
-            return response.status == worker_pb2.HealthCheckResponse.SERVING
-        
+            def message_generator():
+                # Send initial ping
+                ping = worker_pb2.Ping(sequence=1, timestamp=time.time())
+                yield worker_pb2.WorkerMessage(ping=ping)
+                
+                # Keep alive - send pings periodically
+                seq = 2
+                while self._communicate_running:
+                    time.sleep(30)
+                    if self._communicate_running:
+                        ping = worker_pb2.Ping(sequence=seq, timestamp=time.time())
+                        yield worker_pb2.WorkerMessage(ping=ping)
+                        seq += 1
+            
+            # Start the stream
+            responses = self.stub.Communicate(message_generator())
+            
+            # Process responses from master
+            for master_msg in responses:
+                if master_msg.HasField("pong"):
+                    print(f"[gRPC] Received pong from master: seq={master_msg.pong.sequence}")
+                elif master_msg.HasField("config_update"):
+                    print(f"[gRPC] Received config update: {dict(master_msg.config_update.config)}")
+                elif master_msg.HasField("task_update"):
+                    print(f"[gRPC] Received task update: {master_msg.task_update.action}")
+                elif master_msg.HasField("trade_day_data"):
+                    print(f"[gRPC] Received trade day data: {list(master_msg.trade_day_data.trade_days)}")
+            
         except Exception as e:
-            print(f"Health check failed: {e}")
-            return False
+            print(f"[gRPC] Error in communicate stream: {e}")
     
     def start_communicate_stream(self):
         """Start bidirectional streaming communication."""
-        if not self.connected:
-            print("Not connected")
-            return
-        
-        def stream_worker():
-            # Send initial ping
-            yield worker_pb2.WorkerMessage(
-                ping=worker_pb2.Ping(sequence=1, timestamp=time.time())
+        if not self._communicate_running:
+            self._communicate_running = True
+            self._communicate_thread = threading.Thread(
+                target=self._start_communicate_stream,
+                daemon=True
             )
-        
-        try:
-            responses = self.stub.Communicate(stream_worker())
-            for response in responses:
-                if response.HasField("pong"):
-                    print(f"Received pong: sequence={response.pong.sequence}")
-                elif response.HasField("config_update"):
-                    print(f"Received config update: {response.config_update.config}")
-                elif response.HasField("task_update"):
-                    print(f"Received task update: {response.task_update.action}")
-                elif response.HasField("trade_day_data"):
-                    print(f"Received trade days: {response.trade_day_data.trade_days}")
-        
-        except Exception as e:
-            print(f"Error in communicate stream: {e}")
-
-
-def main():
-    """Test the gRPC client."""
-    client = CentralGrpcClient()
+            self._communicate_thread.start()
+            print("[gRPC] Started bidirectional communication stream")
     
-    # Test health check
-    print("\n1. Testing health check...")
+    def _stop_communicate_stream(self):
+        """Stop bidirectional streaming."""
+        self._communicate_running = False
+        if self._communicate_thread and self._communicate_thread.is_alive():
+            self._communicate_thread.join(timeout=2)
+
+
+def run_demo():
+    """Run a demo of the gRPC client."""
+    print("=" * 70)
+    print("gRPC Worker Client Demo")
+    print("=" * 70)
+    
+    # Create client
+    print("\n[1] Creating gRPC client...")
+    client = CentralGrpcClient("localhost:50051")
+    
+    # Health check
+    print("\n[2] Health check...")
     healthy = client.health_check()
-    print(f"Health check: {'OK' if healthy else 'FAILED'}")
+    print(f"    Master health: {'✓ Healthy" if healthy else "✗ Unhealthy")
     
-    # Test registration
-    print("\n2. Testing registration...")
-    registered = client.register_worker()
-    print(f"Registration: {'OK' if registered else 'FAILED'}")
+    if not healthy:
+        print("\nMaster is not available. Please start the gRPC server first.")
+        return
     
-    # Test heartbeat
+    # Register
+    print("\n[3] Registering worker...")
+    registered = client.register()
+    
     if registered:
-        print("\n3. Testing heartbeat...")
+        # Heartbeat
+        print("\n[4] Sending heartbeat...")
         heartbeat_ok = client.send_heartbeat()
-        print(f"Heartbeat: {'OK' if heartbeat_ok else 'FAILED'}")
+        print(f"    Heartbeat: {'✓ OK' if heartbeat_ok else '✗ FAILED'}")
         
-        # Test sending logs
-        print("\n4. Testing sending logs...")
+        # Send logs
+        print("\n[5] Sending test logs...")
         test_logs = [
-            {"level": "INFO", "message": "Test log 1", "source": "test"},
-            {"level": "WARN", "message": "Test log 2", "source": "test"}
+            {"level": "INFO", "message": "Worker started (gRPC)", "source": "demo"},
+            {"level": "WARN", "message": "High memory usage", "source": "monitor"},
+            {"level": "INFO", "message": "Processing completed", "source": "worker"}
         ]
         logs_ok = client.send_logs(test_logs)
-        print(f"Send logs: {'OK' if logs_ok else 'FAILED'}")
+        print(f"    Logs: {'✓ OK' if logs_ok else '✗ FAILED'}")
         
-        # Test sending metrics
-        print("\n5. Testing sending metrics...")
-        test_metrics = [
-            {"name": "cpu_usage", "value": 45.5, "unit": "%"},
-            {"name": "memory_usage", "value": 62.3, "unit": "%"}
-        ]
-        metrics_ok = client.send_metrics(test_metrics)
-        print(f"Send metrics: {'OK' if metrics_ok else 'FAILED'}")
-        
-        # Test get config
-        print("\n6. Testing get config...")
+        # Get config
+        print("\n[6] Getting config...")
         config = client.get_config()
         if config:
-            print(f"Got config: {config}")
+            print(f"    ✓ Config: {config}")
+    
+    print("\n" + "=" * 70)
+    print("Demo complete!")
+    print("=" * 70)
     
     client.close()
 
 
 if __name__ == "__main__":
-    main()
+    run_demo()

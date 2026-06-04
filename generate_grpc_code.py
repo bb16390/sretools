@@ -4,8 +4,9 @@ Script to generate gRPC Python code from .proto files.
 """
 
 import os
-import subprocess
 import sys
+import subprocess
+import shutil
 
 
 def main():
@@ -76,19 +77,23 @@ def main():
                 print(f"  Stderr: {e.stderr}", file=sys.stderr)
             return 1
     
-    # Fix import statements in generated files
+    # Fix imports - remove relative imports for direct usage
     for out_dir in [out_dir_master, out_dir_worker]:
         grpc_file = os.path.join(out_dir, "worker_pb2_grpc.py")
         if os.path.exists(grpc_file):
             with open(grpc_file, "r") as f:
                 content = f.read()
-            # Replace absolute import with relative import
+            
+            # Replace relative import with absolute
             content = content.replace(
-                "import worker_pb2 as worker__pb2",
-                "from . import worker_pb2 as worker__pb2"
+                "from . import worker_pb2 as worker__pb2",
+                "import worker_pb2 as worker__pb2"
             )
+            
             with open(grpc_file, "w") as f:
                 f.write(content)
+            
+            print(f"\n✓ Fixed imports in {os.path.basename(grpc_file)}")
     
     print("\n✅ All code generated successfully!")
     return 0

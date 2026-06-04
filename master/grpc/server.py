@@ -1,23 +1,37 @@
 """
-gRPC Server implementation for Master.
+gRPC Server implementation for Master - Worker Communication.
+This runs in parallel with the existing HTTP/REST API.
 """
 
 import time
 import grpc
+import threading
 from concurrent import futures
 from typing import Dict, Any, List
 
-from master.grpc import worker_pb2
-from master.grpc import worker_pb2_grpc
-from core.security import verify_signature, SECRET_KEY
+import sys
+import os
+
+# Add the current directory to path for gRPC modules
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+try:
+    from core.settings import settings
+    from core.security import verify_signature, SECRET_KEY
+except ImportError:
+    # Fallback if not running in the full project context
+    SECRET_KEY = "test-secret-key"
+
+import worker_pb2
+import worker_pb2_grpc
 
 
-# In-memory storage for workers and connections
+# In-memory storage (shared with HTTP API if needed)
 workers: Dict[str, Dict[str, Any]] = {}
-worker_connections: Dict[str, Any] = {}
+worker_connections: Dict[str, Any] = {}  # For bidirectional streaming
 
 # Default worker config
-default_worker_config = {
+worker_config = {
     "log_collect_interval": "5",
     "log_batch_size": "1000",
     "log_queue_size": "10000",
@@ -27,7 +41,11 @@ default_worker_config = {
 
 
 class WorkerServiceServicer(worker_pb2_grpc.WorkerServiceServicer):
-    """Implementation of WorkerService."""
+    """Implementation of WorkerService gRPC."""
+    
+    def __init__(self):
+        # Store bidirectional streams for pushing updates
+        self.active_streams: Dict[str, Any] = {}
     
     def RegisterWorker(self, request, context):
         """Register a worker with the master."""
@@ -67,13 +85,13 @@ class WorkerServiceServicer(worker_pb2_grpc.WorkerServiceServicer):
             }
         }
         
-        print(f"Worker {worker_id} registered successfully")
+        print(f"[gRPC] Worker {worker_id} registered successfully")
         
         return worker_pb2.RegisterResponse(
             success=True,
             message="Worker registered successfully",
             worker_id=worker_id,
-            config=default_worker_config,
+            config=worker_config,
             timestamp=time.time()
         )
     
@@ -98,7 +116,7 @@ class WorkerServiceServicer(worker_pb2_grpc.WorkerServiceServicer):
         worker_id = request.worker_id
         if worker_id not in workers:
             context.set_code(grpc.StatusCode.NOT_FOUND)
-            context.set_details("Worker not found")
+            context.set_details("Worker not registered")
             return worker_pb2.HeartbeatResponse(
                 success=False,
                 message="Worker not registered",
@@ -109,6 +127,8 @@ class WorkerServiceServicer(worker_pb2_grpc.WorkerServiceServicer):
         workers[worker_id]["last_heartbeat"] = time.time()
         workers[worker_id]["status"] = request.status
         
+        print(f"[gRPC] Heartbeat from worker {worker_id}")
+        
         return worker_pb2.HeartbeatResponse(
             success=True,
             message="Heartbeat received",
@@ -117,7 +137,7 @@ class WorkerServiceServicer(worker_pb2_grpc.WorkerServiceServicer):
     
     def SendLogs(self, request_iterator, context):
         """Receive logs from worker (client streaming)."""
-        log_count = 0
+        received_count = 0
         worker_id = None
         
         try:
@@ -125,25 +145,25 @@ class WorkerServiceServicer(worker_pb2_grpc.WorkerServiceServicer):
                 if worker_id is None:
                     worker_id = log_entry.worker_id
                 
-                log_count += 1
+                received_count += 1
                 # Here you would process/store the log
-                print(f"Received log from {log_entry.worker_id}: {log_entry.message}")
-        
+                print(f"[gRPC] Log from {log_entry.worker_id}: [{log_entry.level}] {log_entry.message}")
+                
         except Exception as e:
-            print(f"Error receiving logs: {e}")
+            print(f"[gRPC] Error receiving logs: {e}")
             context.set_code(grpc.StatusCode.INTERNAL)
             context.set_details(str(e))
         
         return worker_pb2.SendLogsResponse(
             success=True,
-            message=f"Received {log_count} logs",
-            received_count=log_count,
+            message=f"Received {received_count} logs",
+            received_count=received_count,
             timestamp=time.time()
         )
     
     def SendMetrics(self, request_iterator, context):
         """Receive metrics from worker (client streaming)."""
-        metric_count = 0
+        received_count = 0
         worker_id = None
         
         try:
@@ -151,32 +171,34 @@ class WorkerServiceServicer(worker_pb2_grpc.WorkerServiceServicer):
                 if worker_id is None:
                     worker_id = metric_entry.worker_id
                 
-                metric_count += 1
+                received_count += 1
                 # Here you would process/store the metric
-                print(f"Received metric from {metric_entry.worker_id}: {metric_entry.name} = {metric_entry.value}")
-        
+                print(f"[gRPC] Metric from {metric_entry.worker_id}: {metric_entry.name} = {metric_entry.value} {metric_entry.unit}")
+                
         except Exception as e:
-            print(f"Error receiving metrics: {e}")
+            print(f"[gRPC] Error receiving metrics: {e}")
             context.set_code(grpc.StatusCode.INTERNAL)
             context.set_details(str(e))
         
         return worker_pb2.SendMetricsResponse(
             success=True,
-            message=f"Received {metric_count} metrics",
-            received_count=metric_count,
+            message=f"Received {received_count} metrics",
+            received_count=received_count,
             timestamp=time.time()
         )
     
     def GetConfig(self, request, context):
         """Get configuration for worker."""
+        print(f"[gRPC] Config requested by worker {request.worker_id}")
+        
         return worker_pb2.GetConfigResponse(
             success=True,
-            config=default_worker_config,
+            config=worker_config,
             timestamp=time.time()
         )
     
     def HealthCheck(self, request, context):
-        """Health check endpoint."""
+        """Health check."""
         return worker_pb2.HealthCheckResponse(
             status=worker_pb2.HealthCheckResponse.SERVING,
             timestamp=time.time()
@@ -187,8 +209,17 @@ class WorkerServiceServicer(worker_pb2_grpc.WorkerServiceServicer):
         worker_id = "unknown"
         
         try:
-            # Process messages from worker
+            # First message identifies the worker
+            first_message = True
+            
             for worker_msg in request_iterator:
+                if first_message:
+                    # Try to get worker_id from the message metadata or first message
+                    worker_id = "stream-worker-" + str(int(time.time()))
+                    self.active_streams[worker_id] = context
+                    first_message = False
+                    print(f"[gRPC] Bidirectional stream established for worker {worker_id}")
+                
                 if worker_msg.HasField("ping"):
                     # Respond with pong
                     pong = worker_pb2.Pong(
@@ -199,32 +230,67 @@ class WorkerServiceServicer(worker_pb2_grpc.WorkerServiceServicer):
                     yield master_msg
                 
                 elif worker_msg.HasField("config_ack"):
-                    print(f"Received config ack from worker")
+                    print(f"[gRPC] Received config ack from worker {worker_id}")
                 
                 elif worker_msg.HasField("task_status"):
-                    print(f"Received task status: {worker_msg.task_status.status}")
-        
+                    print(f"[gRPC] Received task status from worker {worker_id}: {worker_msg.task_status.status}")
+                
         except Exception as e:
-            print(f"Error in bidirectional stream: {e}")
+            print(f"[gRPC] Error in bidirectional stream: {e}")
+        
+        finally:
+            if worker_id in self.active_streams:
+                del self.active_streams[worker_id]
+                print(f"[gRPC] Bidirectional stream closed for worker {worker_id}")
 
 
-def serve(port: int = 50051):
-    """Start the gRPC server."""
+# Global server instance
+_grpc_server = None
+
+
+def start_grpc_server(port: int = 50051, daemon: bool = True):
+    """Start the gRPC server in a background thread."""
+    global _grpc_server
+    
+    if _grpc_server:
+        print("gRPC Server already running")
+        return
+    
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
-    worker_pb2_grpc.add_WorkerServiceServicer_to_server(
-        WorkerServiceServicer(), server
-    )
+    worker_pb2_grpc.add_WorkerServiceServicer_to_server(WorkerServiceServicer(), server)
     server.add_insecure_port(f"[::]:{port}")
     server.start()
     
-    print(f"gRPC Server started on port {port}")
+    _grpc_server = server
+    print(f"✅ Master gRPC Server started on port {port} (parallel with HTTP API)")
     
-    try:
-        server.wait_for_termination()
-    except KeyboardInterrupt:
-        print("Shutting down gRPC server...")
-        server.stop(0)
+    if daemon:
+        # Run in background thread
+        def run_server():
+            try:
+                server.wait_for_termination()
+            except KeyboardInterrupt:
+                print("gRPC Server shutdown requested")
+                server.stop(0)
+        
+        server_thread = threading.Thread(target=run_server, daemon=True)
+        server_thread.start()
+    else:
+        try:
+            server.wait_for_termination()
+        except KeyboardInterrupt:
+            print("Shutting down gRPC server...")
+            server.stop(0)
+
+
+def stop_grpc_server():
+    """Stop the gRPC server."""
+    global _grpc_server
+    if _grpc_server:
+        print("Stopping gRPC server...")
+        _grpc_server.stop(0)
+        _grpc_server = None
 
 
 if __name__ == "__main__":
-    serve()
+    start_grpc_server(daemon=False)

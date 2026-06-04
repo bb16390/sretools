@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package worker;
 
-// Worker Service definition
+// Worker Service definition - Full Master-Worker Communication
 service WorkerService {
   // Register a worker with the master
   rpc RegisterWorker(RegisterRequest) returns (RegisterResponse);
@@ -22,7 +22,7 @@ service WorkerService {
   // Health check
   rpc HealthCheck(HealthCheckRequest) returns (HealthCheckResponse);
   
-  // Bidirectional streaming for real-time communication
+  // Bidirectional streaming for real-time communication (replaces WebSocket)
   rpc Communicate(stream WorkerMessage) returns (stream MasterMessage);
 }
 
