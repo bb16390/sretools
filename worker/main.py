@@ -11,7 +11,7 @@ from worker.metrics.metric_converter import MetricConverter
 from worker.communicator.central_client import CentralClient
 from worker.scheduler.task_scheduler import TaskScheduler
 from worker.scheduler.trade_day_cache import TradeDayCache
-from worker.scheduler.tasks import LogCollectorTask, MetricConverterTask, DatabaseCollectorTask
+from worker.scheduler.tasks import LogCollectorTask, MetricConverterTask, DatabaseCollectorTask, KafkaCollectorTask
 
 # 配置日志系统
 log_dir = os.path.dirname(settings.log_dir)
@@ -71,6 +71,7 @@ class Worker:
             self.scheduler.register_task_type("log_collector", LogCollectorTask)
             self.scheduler.register_task_type("metric_converter", MetricConverterTask)
             self.scheduler.register_task_type("database_collector", DatabaseCollectorTask)
+            self.scheduler.register_task_type("kafka_collector", KafkaCollectorTask)
             app_logger.info("Task types registered with scheduler factory")
             
             # 设置 worker_id

@@ -32,6 +32,9 @@ def _get_adapter_class(adapter_type: str):
         elif adapter_type == "redis":
             from worker.adapter.redis_adapter import RedisAdapter
             _ADAPTER_CLASS_MAP["redis"] = RedisAdapter
+        elif adapter_type == "kafka":
+            from worker.adapter.kafka_adapter import KafkaAdapter
+            _ADAPTER_CLASS_MAP["kafka"] = KafkaAdapter
         else:
             raise ValueError(f"Unknown adapter_type: {adapter_type}")
     return _ADAPTER_CLASS_MAP[adapter_type]
