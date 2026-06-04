@@ -107,7 +107,14 @@ class CentralGrpcClient:
                 self.registered = True
                 print(f"[gRPC] ✓ Worker {settings.worker_id} registered successfully")
                 if response.config:
-                    print(f"[gRPC]   Received config: {dict(response.config)}")
+                    config_dict = dict(response.config)
+                    print(f"[gRPC]   Received config: {config_dict}")
+                    # 应用配置
+                    try:
+                        settings.update_from_dict(config_dict)
+                        print(f"[gRPC]   Applied config")
+                    except Exception as e:
+                        print(f"[gRPC]   Error applying config: {e}")
                 return True
             else:
                 print(f"[gRPC] Registration failed: {response.message}")
@@ -191,7 +198,14 @@ class CentralGrpcClient:
             request = worker_pb2.GetConfigRequest(worker_id=settings.worker_id)
             response = self.stub.GetConfig(request)
             if response.success:
-                return dict(response.config)
+                config_dict = dict(response.config)
+                # 应用配置到 settings
+                try:
+                    settings.update_from_dict(config_dict)
+                    print(f"[gRPC] Applied config from master")
+                except Exception as e:
+                    print(f"[gRPC] Error applying config: {e}")
+                return config_dict
             return None
         except Exception as e:
             print(f"[gRPC] Error getting config: {e}")
@@ -222,7 +236,14 @@ class CentralGrpcClient:
                 if master_msg.HasField("pong"):
                     print(f"[gRPC] Received pong from master: seq={master_msg.pong.sequence}")
                 elif master_msg.HasField("config_update"):
-                    print(f"[gRPC] Received config update: {dict(master_msg.config_update.config)}")
+                    config_dict = dict(master_msg.config_update.config)
+                    print(f"[gRPC] Received config update: {config_dict}")
+                    # 动态应用配置
+                    try:
+                        settings.update_from_dict(config_dict)
+                        print(f"[gRPC] Applied config update")
+                    except Exception as e:
+                        print(f"[gRPC] Error applying config update: {e}")
                 elif master_msg.HasField("task_update"):
                     print(f"[gRPC] Received task update: {master_msg.task_update.action}")
                 elif master_msg.HasField("trade_day_data"):
@@ -262,7 +283,8 @@ def run_demo():
     # Health check
     print("\n[2] Health check...")
     healthy = client.health_check()
-    print(f"    Master health: {'✓ Healthy" if healthy else "✗ Unhealthy")
+    health_status = "✓ Healthy" if healthy else "✗ Unhealthy"
+    print(f"    Master health: {health_status}")
     
     if not healthy:
         print("\nMaster is not available. Please start the gRPC server first.")

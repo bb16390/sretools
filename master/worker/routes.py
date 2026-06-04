@@ -17,13 +17,21 @@ workers = {}
 # 存储worker WebSocket连接
 worker_connections = {}
 
-# 存储worker配置
+# Store worker configuration
 worker_config = {
     "log_collect_interval": 5,
     "log_batch_size": 1000,
     "log_queue_size": 10000,
     "metric_collect_interval": 10,
-    "metric_batch_size": 500
+    "metric_batch_size": 500,
+    "kafka_enabled": False,
+    "kafka_brokers": "localhost:9092",
+    "kafka_group_id": "log-collector-group",
+    "kafka_topics": "logs",
+    "kafka_auto_offset_reset": "earliest",
+    "kafka_enable_auto_commit": False,
+    "kafka_offset_report_interval": 30,
+    "kafka_offset_file_path": "kafka_offsets.json"
 }
 
 # 存储 worker 任务

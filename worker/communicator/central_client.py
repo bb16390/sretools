@@ -157,14 +157,35 @@ class CentralClient:
             if config and "config" in config:
                 # 保存配置到本地
                 self.save_config(config["config"])
+                # 动态更新 Settings
+                try:
+                    from worker.core.settings import settings
+                    settings.update_from_dict(config["config"])
+                    print(f"[CentralClient] Settings updated from config")
+                except Exception as e:
+                    print(f"[CentralClient] Error applying config: {e}")
                 return config["config"]
             else:
                 # 尝试加载本地配置
-                return self.load_config()
+                local_config = self.load_config()
+                if local_config:
+                    try:
+                        from worker.core.settings import settings
+                        settings.update_from_dict(local_config)
+                    except Exception as e:
+                        print(f"[CentralClient] Error applying local config: {e}")
+                return local_config
         except Exception as e:
             print(f"Error getting config from central: {e}")
             # 尝试加载本地配置
-            return self.load_config()
+            local_config = self.load_config()
+            if local_config:
+                try:
+                    from worker.core.settings import settings
+                    settings.update_from_dict(local_config)
+                except Exception as e:
+                    print(f"[CentralClient] Error applying local config: {e}")
+            return local_config
     
     def _send_request(self, endpoint: str, data: Optional[Dict[str, Any]] = None, method: str = "POST") -> Optional[Dict[str, Any]]:
         """

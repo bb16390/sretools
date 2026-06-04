@@ -26,18 +26,6 @@ class LogCollector:
         # 确保存储路径
         os.makedirs(self.local_storage_path, exist_ok=True)
         
-        # 初始化 Kafka 适配器（如果启用）
-        self.kafka_adapter: Optional[KafkaAdapter] = None
-        if settings.kafka_enabled:
-            self.kafka_adapter = KafkaAdapter(
-                brokers=settings.kafka_brokers,
-                group_id=settings.kafka_group_id,
-                topics=settings.kafka_topics,
-                auto_offset_reset=settings.kafka_auto_offset_reset,
-                enable_auto_commit=settings.kafka_enable_auto_commit,
-                consumer_config=settings.kafka_consumer_config
-            )
-        
         self.central_client = central_client
         
         # 当前消费进度
@@ -45,15 +33,18 @@ class LogCollector:
         self.last_report_time = 0
         self.offset_report_interval = settings.kafka_offset_report_interval
         
+        # Kafka 适配器相关
+        self.kafka_adapter: Optional[KafkaAdapter] = None
+        self._kafka_lock = threading.Lock()
+        
         # 加载保存的消费进度
         self._load_offsets()
         
-        # 如果有 Kafka 适配器，设置消费进度
-        if self.kafka_adapter and self.current_offsets:
-            try:
-                self.kafka_adapter.seek(self.current_offsets)
-            except Exception as e:
-                print(f"Error seeking to saved offsets: {e}")
+        # 注册配置更新回调
+        settings.register_config_update_callback(self._on_config_update)
+        
+        # 初始化 Kafka 适配器（如果启用
+        self._init_kafka_adapter()
         
         # 启动收集线程
         self.collect_thread = threading.Thread(target=self.collect_logs, daemon=True)
@@ -63,9 +54,66 @@ class LogCollector:
         self.storage_thread = threading.Thread(target=self.store_logs, daemon=True)
         self.storage_thread.start()
     
+    def _on_config_update(self):
+        """配置更新回调"""
+        print("[LogCollector] Configuration updated, reinitializing Kafka adapter...")
+        self._reinit_kafka_adapter()
+    
+    def _init_kafka_adapter(self):
+        """初始化 Kafka 适配器"""
+        with self._kafka_lock:
+            if settings.kafka_enabled:
+                try:
+                    print(f"[LogCollector] Initializing Kafka adapter with brokers={settings.kafka_brokers}")
+                    self.kafka_adapter = KafkaAdapter(
+                        brokers=settings.kafka_brokers,
+                        group_id=settings.kafka_group_id,
+                        topics=settings.kafka_topics,
+                        auto_offset_reset=settings.kafka_auto_offset_reset,
+                        enable_auto_commit=settings.kafka_enable_auto_commit,
+                        consumer_config=settings.kafka_consumer_config
+                    )
+                    
+                    # 如果有保存的偏移量，应用它
+                    if self.current_offsets:
+                        try:
+                            self.kafka_adapter.seek(self.current_offsets)
+                            print(f"[LogCollector] Applied saved offsets")
+                        except Exception as e:
+                            print(f"[LogCollector] Error applying offsets: {e}")
+                    
+                    print(f"[LogCollector] Kafka adapter initialized successfully")
+                except Exception as e:
+                    print(f"[LogCollector] Failed to initialize Kafka adapter: {e}")
+                    self.kafka_adapter = None
+            else:
+                if self.kafka_adapter:
+                    # 关闭之前的适配器
+                    try:
+                        self.kafka_adapter.close()
+                    except:
+                        pass
+                self.kafka_adapter = None
+                print(f"[LogCollector] Kafka disabled")
+    
+    def _reinit_kafka_adapter(self):
+        """重新初始化 Kafka 适配器"""
+        # 保存当前偏移量
+        try:
+            if self.kafka_adapter:
+                # 获取当前偏移量
+                self.current_offsets = self.kafka_adapter.get_offsets()
+                self._save_offsets()
+                # 关闭旧的
+                self.kafka_adapter.close()
+        except Exception as e:
+            print(f"[LogCollector] Error saving offsets during reinit: {e}")
+        
+        # 重新初始化
+        self._init_kafka_adapter()
+    
     def _load_offsets(self):
-        """从本地文件或 Master 端加载消费进度
-        """
+        """从本地文件或 Master 端加载消费进度"""
         try:
             # 先从本地加载
             if os.path.exists(self.offset_file_path):
@@ -73,8 +121,9 @@ class LogCollector:
                     with open(self.offset_file_path, 'r', encoding='utf-8') as f:
                         data = json.load(f)
                         self.current_offsets = data.get('offsets', {})
-                        print(f"Loaded offsets from local file: {self.current_offsets}")
+                        print(f"[LogCollector] Loaded offsets from local file: {self.current_offsets}")
                 except Exception as e:
+                    print(f"[LogCollector] Error loading local offsets: {e}")
                     self.current_offsets = {}
             else:
                 self.current_offsets = {}
@@ -85,17 +134,16 @@ class LogCollector:
                     master_offsets = self.central_client.get_kafka_offsets()
                     if master_offsets and 'offsets' in master_offsets:
                         self.current_offsets = master_offsets['offsets']
-                        print(f"Loaded offsets from master: {self.current_offsets}")
+                        print(f"[LogCollector] Loaded offsets from master: {self.current_offsets}")
                         # 保存到本地
                         self._save_offsets()
                 except Exception as e:
-                    print(f"Error loading offsets from master: {e}")
+                    print(f"[LogCollector] Error loading offsets from master: {e}")
         except Exception as e:
             self.current_offsets = {}
     
     def _save_offsets(self):
-        """保存消费进度到本地文件
-        """
+        """保存消费进度到本地文件"""
         try:
             data = {
                 'offsets': self.current_offsets,
@@ -104,23 +152,21 @@ class LogCollector:
             with open(self.offset_file_path, 'w', encoding='utf-8') as f:
                 json.dump(data, f, ensure_ascii=False)
         except Exception as e:
-            print(f"Error saving offsets to local file: {e}")
+            print(f"[LogCollector] Error saving offsets to local file: {e}")
     
     def _report_offsets_to_master(self):
-        """上报消费进度到 Master 端
-        """
+        """上报消费进度到 Master 端"""
         if not self.central_client:
             return
         
         try:
             self.central_client.report_kafka_offsets(self.current_offsets)
-            print(f"Reported offsets to master: {self.current_offsets}")
+            print(f"[LogCollector] Reported offsets to master")
         except Exception as e:
-            print(f"Error reporting offsets to master: {e}")
+            print(f"[LogCollector] Error reporting offsets to master: {e}")
     
     def collect_logs(self):
-        """收集日志的主循环
-        """
+        """收集日志的主循环"""
         while True:
             try:
                 if self.kafka_adapter:
@@ -143,16 +189,15 @@ class LogCollector:
                             self._report_offsets_to_master()
                             self.last_report_time = now
                 else:
-                    # 模拟收集（向后兼容）
+                    # 模拟收集（向后兼容
                     self.simulate_log_collection()
                     time.sleep(self.collect_interval)
             except Exception as e:
-                print(f"Error collecting logs: {e}")
+                print(f"[LogCollector] Error collecting logs: {e}")
                 time.sleep(1)
     
     def store_logs(self):
-        """存储日志到本地
-        """
+        """存储日志到本地"""
         while True:
             try:
                 batch = []
@@ -166,12 +211,11 @@ class LogCollector:
                 if batch:
                     self.save_to_local(batch)
             except Exception as e:
-                print(f"Error storing logs: {e}")
+                print(f"[LogCollector] Error storing logs: {e}")
                 time.sleep(1)
     
     def save_to_local(self, logs: List[Dict[str, Any]]):
-        """将日志保存到本地文件
-        """
+        """将日志保存到本地文件"""
         from datetime import datetime
         date_str = datetime.now().strftime("%Y-%m-%d")
         file_path = os.path.join(self.local_storage_path, f"logs_{date_str}.jsonl")
@@ -183,8 +227,7 @@ class LogCollector:
         self.check_storage_size()
     
     def check_storage_size(self):
-        """检查本地存储大小，清理旧文件
-        """
+        """检查本地存储大小，清理旧文件"""
         total_size = 0
         files = []
         
@@ -205,8 +248,7 @@ class LogCollector:
                 os.remove(file_path)
     
     def simulate_log_collection(self):
-        """模拟日志收集
-        """
+        """模拟日志收集"""
         from datetime import datetime
         for i in range(10):
             log = {
@@ -219,11 +261,24 @@ class LogCollector:
             self.log_queue.put(log)
     
     def add_log(self, log: Dict[str, Any]):
-        """添加日志到队列
-        """
+        """添加日志到队列"""
         self.log_queue.put(log)
     
     def get_queue_size(self) -> int:
-        """获取当前队列大小
-        """
+        """获取当前队列大小"""
         return self.log_queue.qsize()
+    
+    def close(self):
+        """关闭资源"""
+        # 取消注册配置更新回调
+        try:
+            settings.unregister_config_update_callback(self._on_config_update)
+        except:
+            pass
+        
+        # 关闭 Kafka 适配器
+        if self.kafka_adapter:
+            try:
+                self.kafka_adapter.close()
+            except:
+                pass
