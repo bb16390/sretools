@@ -11,11 +11,12 @@ logger = logging.getLogger(__name__)
 class TaskScheduler:
     """Worker 端任务调度管理器"""
 
-    def __init__(self, central_client=None):
+    def __init__(self, central_client=None, grpc_client=None):
         self._tasks: Dict[str, BaseTask] = {}
         self._task_factory: Dict[str, Type[BaseTask]] = {}
         self._lock = threading.Lock()
         self._central_client = central_client
+        self._grpc_client = grpc_client
         self._trade_day_cache = None
 
         # 进程存活监控
@@ -26,6 +27,10 @@ class TaskScheduler:
     def set_central_client(self, central_client):
         """设置中心端客户端引用"""
         self._central_client = central_client
+        
+    def set_grpc_client(self, grpc_client):
+        """设置 gRPC 客户端引用"""
+        self._grpc_client = grpc_client
 
     def register_task_type(
         self,
@@ -50,9 +55,12 @@ class TaskScheduler:
             config["execution_mode"] = temp_instance._default_execution_mode().value
 
         # 为 DatabaseCollectorTask 传递 trade_day_cache
-        from worker.scheduler.tasks import DatabaseCollectorTask
+        # 为 KafkaCollectorTask 传递 grpc_client
+        from worker.scheduler.tasks import DatabaseCollectorTask, KafkaCollectorTask
         if task_cls is DatabaseCollectorTask and self._trade_day_cache is not None:
             task = task_cls(task_type=task_type, config=config, trade_day_cache=self._trade_day_cache)
+        elif task_cls is KafkaCollectorTask and self._grpc_client is not None:
+            task = task_cls(task_type=task_type, config=config, grpc_client=self._grpc_client)
         else:
             task = task_cls(task_type=task_type, config=config)
         task.set_status_callback(self._on_task_status)

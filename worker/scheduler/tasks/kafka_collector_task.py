@@ -14,25 +14,16 @@ logger = logging.getLogger(__name__)
 
 
 class OffsetManager:
-    """偏移量管理器，支持 Redis 或本地文件系统保存和读取消费偏移量"""
+    """偏移量管理器，支持本地文件系统保存，并通过 gRPC 上报到 master 端"""
 
     def __init__(
         self,
         task_id: str,
-        storage_type: str = "file",
-        redis_config: Optional[Dict[str, Any]] = None
+        grpc_client=None
     ):
         self.task_id = task_id
-        self.storage_type = storage_type
-        self.redis_config = redis_config or {}
-        self._redis_adapter = None
-
-        if storage_type == "file":
-            self._init_file_storage()
-        elif storage_type == "redis":
-            self._init_redis_storage()
-        else:
-            raise ValueError(f"Unsupported storage type: {storage_type}")
+        self.grpc_client = grpc_client
+        self._init_file_storage()
 
     def _init_file_storage(self):
         """初始化文件存储"""
@@ -41,30 +32,23 @@ class OffsetManager:
             os.makedirs(storage_dir, exist_ok=True)
         self._offset_file = os.path.join(storage_dir, f"kafka_offset_{self.task_id}.json")
 
-    def _init_redis_storage(self):
-        """初始化 Redis 存储"""
-        from worker.adapter.redis_adapter import RedisAdapter
-        self._redis_adapter_cls = RedisAdapter
-
-    def _get_redis_adapter(self):
-        """获取 Redis 适配器实例"""
-        if self._redis_adapter is None:
-            self._redis_adapter = AdapterManager.get_or_create(
-                self._redis_adapter_cls,
-                self.redis_config
-            )
-        return self._redis_adapter
-
     async def save_offsets(self, offsets: Dict[str, Dict[int, int]]):
-        """保存偏移量
+        """保存偏移量到本地文件，并通过 gRPC 上报到 master
 
         Args:
             offsets: 格式为 {topic: {partition: offset}}
         """
-        if self.storage_type == "file":
-            await self._save_offsets_to_file(offsets)
-        elif self.storage_type == "redis":
-            await self._save_offsets_to_redis(offsets)
+        # 首先保存到本地文件
+        await self._save_offsets_to_file(offsets)
+        
+        # 通过 gRPC 上报到 master
+        if self.grpc_client:
+            try:
+                send_success = self.grpc_client.send_kafka_offsets(self.task_id, offsets)
+                if not send_success:
+                    logger.warning(f"Failed to send offsets to master via gRPC")
+            except Exception as e:
+                logger.error(f"Error sending offsets to master: {e}")
 
     async def _save_offsets_to_file(self, offsets: Dict[str, Dict[int, int]]):
         """保存偏移量到文件"""
@@ -75,27 +59,24 @@ class OffsetManager:
         except Exception as e:
             logger.error(f"Failed to save offsets to file: {e}")
 
-    async def _save_offsets_to_redis(self, offsets: Dict[str, Dict[int, int]]):
-        """保存偏移量到 Redis"""
-        try:
-            redis_adapter = self._get_redis_adapter()
-            key = f"kafka:offset:{self.task_id}"
-            await redis_adapter.set(key, json.dumps(offsets))
-            logger.debug(f"Saved offsets to Redis with key: {key}")
-        except Exception as e:
-            logger.error(f"Failed to save offsets to Redis: {e}")
-
     async def load_offsets(self) -> Dict[str, Dict[int, int]]:
         """加载偏移量
 
         Returns:
             格式为 {topic: {partition: offset}} 的字典
         """
-        if self.storage_type == "file":
-            return await self._load_offsets_from_file()
-        elif self.storage_type == "redis":
-            return await self._load_offsets_from_redis()
-        return {}
+        # 优先从 master 获取
+        if self.grpc_client:
+            try:
+                master_offsets = self.grpc_client.get_kafka_offsets(self.task_id)
+                if master_offsets:
+                    logger.debug(f"Loaded offsets from master for task {self.task_id}")
+                    return master_offsets
+            except Exception as e:
+                logger.error(f"Failed to load offsets from master: {e}")
+        
+        # 如果 master 获取失败，尝试从本地文件获取
+        return await self._load_offsets_from_file()
 
     async def _load_offsets_from_file(self) -> Dict[str, Dict[int, int]]:
         """从文件加载偏移量"""
@@ -109,28 +90,12 @@ class OffsetManager:
             logger.error(f"Failed to load offsets from file: {e}")
         return {}
 
-    async def _load_offsets_from_redis(self) -> Dict[str, Dict[int, int]]:
-        """从 Redis 加载偏移量"""
-        try:
-            redis_adapter = self._get_redis_adapter()
-            key = f"kafka:offset:{self.task_id}"
-            value = await redis_adapter.get(key)
-            if value:
-                offsets = json.loads(value)
-                logger.debug(f"Loaded offsets from Redis with key: {key}")
-                return {topic: {int(p): o for p, o in parts.items()} for topic, parts in offsets.items()}
-        except Exception as e:
-            logger.error(f"Failed to load offsets from Redis: {e}")
-        return {}
-
 
 class KafkaCollectorTask(BaseTask):
     """Kafka 消息收集任务
 
     Config fields:
         adapter_config (required): Dict of kwargs for KafkaAdapter constructor.
-        offset_storage (optional): Storage type for offsets, "file" or "redis", default "file".
-        offset_redis_config (optional): Redis config for offset storage if offset_storage is "redis".
         transform_task_id (optional): Task ID for data transformation.
         consume_timeout (optional): Timeout for Kafka consume in seconds, default 1.0.
         max_records_per_batch (optional): Max records to consume per batch, default 100.
@@ -142,11 +107,13 @@ class KafkaCollectorTask(BaseTask):
         task_type: str,
         config: Dict[str, Any],
         task_id: str = None,
+        grpc_client=None,
     ):
         super().__init__(task_type, config, task_id)
         self._validate_config()
         self._offset_manager = None
         self._transform_executor = TransformExecutor()
+        self._grpc_client = grpc_client
 
     def _validate_config(self):
         """验证配置"""
@@ -161,8 +128,6 @@ class KafkaCollectorTask(BaseTask):
     def _run(self):
         """核心执行逻辑"""
         adapter_config = self.config["adapter_config"]
-        offset_storage = self.config.get("offset_storage", "file")
-        offset_redis_config = self.config.get("offset_redis_config", {})
         transform_task_id = self.config.get("transform_task_id")
         consume_timeout = self.config.get("consume_timeout", 1.0)
         max_records_per_batch = self.config.get("max_records_per_batch", 100)
@@ -175,8 +140,7 @@ class KafkaCollectorTask(BaseTask):
         try:
             self._offset_manager = OffsetManager(
                 task_id=self.task_id,
-                storage_type=offset_storage,
-                redis_config=offset_redis_config
+                grpc_client=self._grpc_client
             )
 
             adapter = AdapterManager.get_or_create(KafkaAdapter, adapter_config)

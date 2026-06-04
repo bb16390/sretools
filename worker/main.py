@@ -47,8 +47,16 @@ class Worker:
             self.central_client = CentralClient()
             app_logger.info(f"Central client initialized with servers: {settings.central_servers}")
             
+            # 初始化 gRPC 客户端
+            from worker.grpc.client import CentralGrpcClient
+            self.grpc_client = CentralGrpcClient()
+            if self.grpc_client.health_check():
+                self.grpc_client.register()
+                self.grpc_client.start_communicate_stream()
+                app_logger.info("gRPC client initialized and connected")
+            
             # 初始化任务调度器
-            self.scheduler = TaskScheduler(central_client=self.central_client)
+            self.scheduler = TaskScheduler(central_client=self.central_client, grpc_client=self.grpc_client)
             app_logger.info("TaskScheduler created")
 
             # 初始化交易日缓存

@@ -29,6 +29,7 @@ import worker_pb2_grpc
 # In-memory storage (shared with HTTP API if needed)
 workers: Dict[str, Dict[str, Any]] = {}
 worker_connections: Dict[str, Any] = {}  # For bidirectional streaming
+kafka_offsets: Dict[str, Dict[str, Any]] = {}  # {worker_id: {task_id: offsets_data}}
 
 # Default worker config
 worker_config = {
@@ -203,6 +204,114 @@ class WorkerServiceServicer(worker_pb2_grpc.WorkerServiceServicer):
             status=worker_pb2.HealthCheckResponse.SERVING,
             timestamp=time.time()
         )
+    
+    def SendKafkaOffsets(self, request, context):
+        """Receive Kafka offsets from worker and store them."""
+        try:
+            # Verify signature
+            data_to_verify = {
+                "worker_id": request.worker_id,
+                "task_id": request.task_id,
+                "timestamp": request.timestamp
+            }
+            
+            if not verify_signature(data_to_verify, request.signature, SECRET_KEY):
+                context.set_code(grpc.StatusCode.UNAUTHENTICATED)
+                context.set_details("Invalid signature")
+                return worker_pb2.SendKafkaOffsetsResponse(
+                    success=False,
+                    message="Invalid signature",
+                    timestamp=time.time()
+                )
+            
+            # Store offsets
+            worker_id = request.worker_id
+            task_id = request.task_id
+            
+            if worker_id not in kafka_offsets:
+                kafka_offsets[worker_id] = {}
+            
+            # Convert to serializable format
+            offsets_data = {}
+            for topic_offset in request.topics:
+                offsets_data[topic_offset.topic] = {}
+                for partition_offset in topic_offset.partitions:
+                    offsets_data[topic_offset.topic][partition_offset.partition] = partition_offset.offset
+            
+            kafka_offsets[worker_id][task_id] = {
+                "topics": offsets_data,
+                "timestamp": request.timestamp
+            }
+            
+            print(f"[gRPC] Kafka offsets saved for worker {worker_id}, task {task_id}")
+            
+            return worker_pb2.SendKafkaOffsetsResponse(
+                success=True,
+                message="Kafka offsets saved successfully",
+                timestamp=time.time()
+            )
+            
+        except Exception as e:
+            print(f"[gRPC] Error saving Kafka offsets: {e}")
+            context.set_code(grpc.StatusCode.INTERNAL)
+            context.set_details(str(e))
+            return worker_pb2.SendKafkaOffsetsResponse(
+                success=False,
+                message=f"Error: {str(e)}",
+                timestamp=time.time()
+            )
+    
+    def GetKafkaOffsets(self, request, context):
+        """Get stored Kafka offsets for a worker and task."""
+        try:
+            worker_id = request.worker_id
+            task_id = request.task_id
+            
+            print(f"[gRPC] Kafka offsets requested for worker {worker_id}, task {task_id}")
+            
+            if worker_id not in kafka_offsets or task_id not in kafka_offsets[worker_id]:
+                # Return empty response if no offsets found
+                return worker_pb2.GetKafkaOffsetsResponse(
+                    success=True,
+                    topics=[],
+                    timestamp=time.time()
+                )
+            
+            # Convert stored data back to proto format
+            stored_data = kafka_offsets[worker_id][task_id]
+            topics_list = []
+            
+            for topic, partitions in stored_data["topics"].items():
+                partition_offsets = []
+                for partition, offset in partitions.items():
+                    partition_offsets.append(
+                        worker_pb2.KafkaPartitionOffset(
+                            partition=partition,
+                            offset=offset
+                        )
+                    )
+                topics_list.append(
+                    worker_pb2.KafkaTopicOffsets(
+                        topic=topic,
+                        partitions=partition_offsets
+                    )
+                )
+            
+            return worker_pb2.GetKafkaOffsetsResponse(
+                success=True,
+                topics=topics_list,
+                timestamp=time.time()
+            )
+            
+        except Exception as e:
+            print(f"[gRPC] Error getting Kafka offsets: {e}")
+            context.set_code(grpc.StatusCode.INTERNAL)
+            context.set_details(str(e))
+            return worker_pb2.GetKafkaOffsetsResponse(
+                success=False,
+                topics=[],
+                timestamp=time.time()
+            )
     
     def Communicate(self, request_iterator, context):
         """Bidirectional streaming for real-time communication."""

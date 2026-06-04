@@ -16,6 +16,12 @@ service WorkerService {
   // Send metrics from worker to master (client streaming)
   rpc SendMetrics(stream MetricEntry) returns (SendMetricsResponse);
   
+  // Send Kafka offsets from worker to master
+  rpc SendKafkaOffsets(SendKafkaOffsetsRequest) returns (SendKafkaOffsetsResponse);
+  
+  // Get Kafka offsets from master for a task
+  rpc GetKafkaOffsets(GetKafkaOffsetsRequest) returns (GetKafkaOffsetsResponse);
+  
   // Get configuration from master
   rpc GetConfig(GetConfigRequest) returns (GetConfigResponse);
   
@@ -193,4 +199,45 @@ message TradeDayData {
 message Pong {
   int32 sequence = 1;
   double timestamp = 2;
+}
+
+// Kafka partition offset
+message KafkaPartitionOffset {
+  int32 partition = 1;
+  int64 offset = 2;
+}
+
+// Kafka topic offsets
+message KafkaTopicOffsets {
+  string topic = 1;
+  repeated KafkaPartitionOffset partitions = 2;
+}
+
+// Send Kafka offsets request
+message SendKafkaOffsetsRequest {
+  string worker_id = 1;
+  string task_id = 2;
+  repeated KafkaTopicOffsets topics = 3;
+  double timestamp = 4;
+  string signature = 5;
+}
+
+// Send Kafka offsets response
+message SendKafkaOffsetsResponse {
+  bool success = 1;
+  string message = 2;
+  double timestamp = 3;
+}
+
+// Get Kafka offsets request
+message GetKafkaOffsetsRequest {
+  string worker_id = 1;
+  string task_id = 2;
+}
+
+// Get Kafka offsets response
+message GetKafkaOffsetsResponse {
+  bool success = 1;
+  repeated KafkaTopicOffsets topics = 2;
+  double timestamp = 3;
 }

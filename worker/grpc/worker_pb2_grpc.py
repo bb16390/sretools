@@ -55,6 +55,16 @@ class WorkerServiceStub:
                 request_serializer=worker__pb2.MetricEntry.SerializeToString,
                 response_deserializer=worker__pb2.SendMetricsResponse.FromString,
                 _registered_method=True)
+        self.SendKafkaOffsets = channel.unary_unary(
+                '/worker.WorkerService/SendKafkaOffsets',
+                request_serializer=worker__pb2.SendKafkaOffsetsRequest.SerializeToString,
+                response_deserializer=worker__pb2.SendKafkaOffsetsResponse.FromString,
+                _registered_method=True)
+        self.GetKafkaOffsets = channel.unary_unary(
+                '/worker.WorkerService/GetKafkaOffsets',
+                request_serializer=worker__pb2.GetKafkaOffsetsRequest.SerializeToString,
+                response_deserializer=worker__pb2.GetKafkaOffsetsResponse.FromString,
+                _registered_method=True)
         self.GetConfig = channel.unary_unary(
                 '/worker.WorkerService/GetConfig',
                 request_serializer=worker__pb2.GetConfigRequest.SerializeToString,
@@ -104,6 +114,20 @@ class WorkerServiceServicer:
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def SendKafkaOffsets(self, request, context):
+        """Send Kafka offsets from worker to master
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def GetKafkaOffsets(self, request, context):
+        """Get Kafka offsets from master for a task
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
     def GetConfig(self, request, context):
         """Get configuration from master
         """
@@ -147,6 +171,16 @@ def add_WorkerServiceServicer_to_server(servicer, server):
                     servicer.SendMetrics,
                     request_deserializer=worker__pb2.MetricEntry.FromString,
                     response_serializer=worker__pb2.SendMetricsResponse.SerializeToString,
+            ),
+            'SendKafkaOffsets': grpc.unary_unary_rpc_method_handler(
+                    servicer.SendKafkaOffsets,
+                    request_deserializer=worker__pb2.SendKafkaOffsetsRequest.FromString,
+                    response_serializer=worker__pb2.SendKafkaOffsetsResponse.SerializeToString,
+            ),
+            'GetKafkaOffsets': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetKafkaOffsets,
+                    request_deserializer=worker__pb2.GetKafkaOffsetsRequest.FromString,
+                    response_serializer=worker__pb2.GetKafkaOffsetsResponse.SerializeToString,
             ),
             'GetConfig': grpc.unary_unary_rpc_method_handler(
                     servicer.GetConfig,
@@ -273,6 +307,60 @@ class WorkerService:
             '/worker.WorkerService/SendMetrics',
             worker__pb2.MetricEntry.SerializeToString,
             worker__pb2.SendMetricsResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def SendKafkaOffsets(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/worker.WorkerService/SendKafkaOffsets',
+            worker__pb2.SendKafkaOffsetsRequest.SerializeToString,
+            worker__pb2.SendKafkaOffsetsResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetKafkaOffsets(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/worker.WorkerService/GetKafkaOffsets',
+            worker__pb2.GetKafkaOffsetsRequest.SerializeToString,
+            worker__pb2.GetKafkaOffsetsResponse.FromString,
             options,
             channel_credentials,
             insecure,
