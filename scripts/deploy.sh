@@ -33,6 +33,115 @@ log_step() {
     echo -e "${BLUE}[STEP]${NC} $1"
 }
 
+# 检查 Python 环境
+check_python_env() {
+    log_step "检查 Python 环境..."
+    
+    local python_cmd=""
+    
+    # 尝试查找 Python 命令
+    if command -v python3 &> /dev/null; then
+        python_cmd="python3"
+    elif command -v python &> /dev/null; then
+        python_cmd="python"
+    else
+        log_error "未找到 Python，请先安装 Python 3.12 或更高版本"
+        exit 1
+    fi
+    
+    log_info "找到 Python 命令: $python_cmd"
+    
+    # 检查 Python 版本
+    local python_version=$($python_cmd -c 'import sys; print(".".join(map(str, sys.version_info[:2])))')
+    log_info "Python 版本: $python_version"
+    
+    if ! $python_cmd -c 'import sys; assert sys.version_info >= (3, 12), "Python version too old"' 2>/dev/null; then
+        log_error "Python 版本过低，需要 3.12 或更高版本"
+        exit 1
+    fi
+    
+    log_info "Python 版本检查通过"
+    
+    # 导出 Python 命令供后续使用
+    export PYTHON_CMD="$python_cmd"
+}
+
+# 检查包管理器
+check_package_manager() {
+    log_step "检查包管理器..."
+    
+    # 优先使用 uv
+    if command -v uv &> /dev/null; then
+        log_info "找到 uv 包管理器"
+        export PKG_MANAGER="uv"
+        export PKG_INSTALL="uv pip install -e ."
+    # 其次使用 pip
+    elif command -v pip3 &> /dev/null; then
+        log_info "找到 pip3 包管理器"
+        export PKG_MANAGER="pip3"
+        export PKG_INSTALL="pip3 install -e ."
+    elif command -v pip &> /dev/null; then
+        log_info "找到 pip 包管理器"
+        export PKG_MANAGER="pip"
+        export PKG_INSTALL="pip install -e ."
+    else
+        log_error "未找到包管理器（uv 或 pip），请先安装"
+        exit 1
+    fi
+    
+    log_info "包管理器检查通过"
+}
+
+# 检查依赖
+check_dependencies() {
+    log_step "检查 Python 依赖..."
+    
+    if [ ! -f "$PROJECT_ROOT/pyproject.toml" ]; then
+        log_error "未找到 pyproject.toml"
+        exit 1
+    fi
+    
+    log_info "检测到 pyproject.toml"
+    
+    # 尝试检查依赖是否已安装
+    local all_installed=true
+    local missing_deps=()
+    
+    # 提取主要依赖包名进行检查
+    local main_deps=(
+        "fastapi"
+        "sqlmodel"
+        "grpcio"
+        "redis"
+        "requests"
+        "pydantic"
+    )
+    
+    for dep in "${main_deps[@]}"; do
+        if ! $PYTHON_CMD -c "import $dep" 2>/dev/null; then
+            all_installed=false
+            missing_deps+=("$dep")
+        else
+            log_info "已安装: $dep"
+        fi
+    done
+    
+    if [ "$all_installed" = false ]; then
+        log_warn "部分依赖未安装: ${missing_deps[*]}"
+        echo ""
+        read -p "是否自动安装依赖? (y/n): " install_choice
+        if [[ "$install_choice" == "y" || "$install_choice" == "Y" ]]; then
+            log_info "正在安装依赖..."
+            cd "$PROJECT_ROOT" && $PKG_INSTALL
+            log_info "依赖安装完成"
+        else
+            log_warn "请稍后手动运行: $PKG_INSTALL"
+        fi
+    else
+        log_info "所有核心依赖已安装"
+    fi
+}
+
 # 读取用户输入（带默认值）
 read_input() {
     local prompt=$1
@@ -51,10 +160,6 @@ read_input() {
 
 # 选择部署类型
 select_deploy_type() {
-    echo ""
-    echo "=========================================="
-    echo "        项目部署配置向导"
-    echo "=========================================="
     echo ""
     echo "请选择部署类型:"
     echo "  1) 仅部署 Master"
@@ -81,6 +186,55 @@ select_deploy_type() {
 
     log_info "已选择: $DEPLOY_TYPE"
 }
+
+# 主函数
+main() {
+    echo ""
+    echo "=========================================="
+    echo "        项目部署配置向导"
+    echo "=========================================="
+    echo ""
+    
+    # 环境检查
+    check_python_env
+    echo ""
+    check_package_manager
+    echo ""
+    check_dependencies
+    echo ""
+    
+    select_deploy_type
+
+    case $DEPLOY_TYPE in
+        master)
+            configure_master
+            generate_master_env
+            ;;
+        worker)
+            configure_worker
+            generate_worker_env
+            ;;
+        all)
+            configure_master
+            generate_master_env
+            echo ""
+            configure_worker
+            generate_worker_env
+            ;;
+    esac
+
+    echo ""
+    echo "=========================================="
+    log_info "部署配置完成!"
+    echo "=========================================="
+    echo ""
+    echo "下一步操作:"
+    echo "  1. 启动服务: ./scripts/start.sh all"
+    echo "  2. 停止服务: ./scripts/stop.sh all"
+    echo ""
+}
+
+main "$@"
 
 # 配置 Master
 configure_master() {
@@ -210,39 +364,6 @@ SECRET_KEY=your-secret-key-here
 EOF
 
     log_info "Worker 配置文件已生成: $WORKER_DIR/.env"
-}
-
-# 主函数
-main() {
-    select_deploy_type
-
-    case $DEPLOY_TYPE in
-        master)
-            configure_master
-            generate_master_env
-            ;;
-        worker)
-            configure_worker
-            generate_worker_env
-            ;;
-        all)
-            configure_master
-            generate_master_env
-            echo ""
-            configure_worker
-            generate_worker_env
-            ;;
-    esac
-
-    echo ""
-    echo "=========================================="
-    log_info "部署配置完成!"
-    echo "=========================================="
-    echo ""
-    echo "下一步操作:"
-    echo "  1. 启动服务: ./scripts/start.sh all"
-    echo "  2. 停止服务: ./scripts/stop.sh all"
-    echo ""
 }
 
 main "$@"
