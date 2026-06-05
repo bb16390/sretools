@@ -7,7 +7,7 @@ from logging import FileHandler
 from worker.core.settings import settings
 from worker.core.logging import AsyncFileHandler
 from worker.metrics.metric_converter import MetricConverter
-from worker.communicator.central_client import CentralClient
+from worker.grpc.client import CentralGrpcClient
 from worker.scheduler.task_scheduler import TaskScheduler
 from worker.scheduler.trade_day_cache import TradeDayCache
 from worker.scheduler.tasks import LogCollectorTask, MetricConverterTask, DatabaseCollectorTask, KafkaCollectorTask
@@ -42,37 +42,30 @@ class Worker:
         app_logger.info("Initializing worker...")
         
         try:
-            # 初始化中心端客户端
-            self.central_client = CentralClient()
-            app_logger.info(f"Central client initialized with servers: {settings.central_servers}")
-            
             # 初始化 gRPC 客户端
-            from worker.grpc.client import CentralGrpcClient
             self.grpc_client = CentralGrpcClient()
-            if self.grpc_client.health_check():
-                self.grpc_client.register()
-                self.grpc_client.start_communicate_stream()
-                app_logger.info("gRPC client initialized and connected")
+            self.grpc_client.register()
+            app_logger.info("gRPC client initialized and connected")
             
             # 初始化任务调度器
-            self.scheduler = TaskScheduler(central_client=self.central_client, grpc_client=self.grpc_client)
+            self.scheduler = TaskScheduler(central_client=None, grpc_client=self.grpc_client)
             app_logger.info("TaskScheduler created")
 
             # 初始化交易日缓存
-            self.trade_day_cache = TradeDayCache(self.central_client)
+            self.trade_day_cache = TradeDayCache(self.grpc_client)
             app_logger.info("TradeDayCache initialized")
 
-            # 设置交易日缓存到中心端客户端
-            self.central_client.set_trade_day_cache(self.trade_day_cache)
-            app_logger.info("TradeDayCache set on central client")
+            # 设置交易日缓存到 gRPC 客户端
+            self.grpc_client.set_trade_day_cache(self.trade_day_cache)
+            app_logger.info("TradeDayCache set on grpc client")
 
             # 将交易日缓存传递给调度器
             self.scheduler._trade_day_cache = self.trade_day_cache
             app_logger.info("TradeDayCache set on scheduler")
             
-            # 注册调度器到中心端客户端
-            self.central_client.register_task_scheduler(self.scheduler)
-            app_logger.info("TaskScheduler registered with central client")
+            # 注册调度器到 gRPC 客户端
+            self.grpc_client.register_task_scheduler(self.scheduler)
+            app_logger.info("TaskScheduler registered with grpc client")
             
             # 注册任务类型到调度器工厂
             self.scheduler.register_task_type("log_collector", LogCollectorTask)
@@ -108,9 +101,11 @@ class Worker:
         except KeyboardInterrupt:
             app_logger.info("Worker stopped by user")
             self.scheduler.shutdown()
+            self.grpc_client.close()
         except Exception as e:
             app_logger.error(f"Worker error: {e}")
             self.scheduler.shutdown()
+            self.grpc_client.close()
             raise
 
 
