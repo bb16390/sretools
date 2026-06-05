@@ -7,7 +7,6 @@ from fastapi.openapi.docs import (
     get_swagger_ui_html,
 )
 from fastapi.staticfiles import StaticFiles
-# from prometheus_fastapi_instrumentator import Instrumentator
 from sqlmodel import SQLModel
 from starlette.middleware.cors import CORSMiddleware
 from starlette.responses import RedirectResponse
@@ -21,7 +20,6 @@ import sys
 from logging import FileHandler
 from core.logging import AsyncFileHandler
 from core.settings import settings
-from worker.routes import router as worker_router
 from fastapi_amis_admin.crud.schema import BaseApiOut
 
 # 添加 gRPC 相关导入
@@ -83,32 +81,17 @@ class FastAPI(FastAPIBase):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await site.db.async_run_sync(SQLModel.metadata.create_all, is_session=False)
-    # 创建默认管理员,用户名: admin,密码: admin, 请及时修改密码!!!
     User = await auth.create_role_user("admin")
-    # 创建默认超级管理员,用户名: root,密码: root, 请及时修改密码!!!
     Root = await auth.create_role_user("root")
-    # 运行site的startup方法,加载casbin策略等
     await site.router.startup()
     if not auth.enforcer.enforce("u:admin", site.unique_id, "page", "page"):
         await auth.enforcer.add_policy(
             "u:admin", site.unique_id, "page", "page", "allow"
         )
         app_logger.info("管理员权限策略添加完成")
-    # 重置采集任务状态
-    # await site.db.async_execute()
-    # await site.db.async_commit()
-
-    # 启动定时任务
-    # scheduler.start()
-    # app_logger.info("定时任务启动完成")
-
-    # # instrumentator.expose(app)
-    # app_logger.info("Prometheus监控暴露完成")
     
-    # 启动 gRPC 服务（如果可用）
     if GRPC_AVAILABLE:
         try:
-            # 在后台线程中启动 gRPC 服务
             grpc_thread = threading.Thread(
                 target=lambda: start_grpc_server(port=50051, daemon=True),
                 daemon=True
@@ -122,9 +105,6 @@ async def lifespan(app: FastAPI):
     
     app_logger.info("应用启动完成")
     yield
-    # 启动定时任务
-    # scheduler.shutdown()
-    # app_logger.info("定时任务已关闭")
     app_logger.info("优雅停机")
 
 
@@ -142,20 +122,11 @@ app = FastAPI(
 # 配置静态文件目录
 app.mount("/static", StaticFiles(directory=settings.static_dir), name="static")
 
-# 安装应用manager
-# manager.setup(app)
-
-# 安装应用job
-# job.setup(app)
-
 site.register_admin(NavPageAdmin)
 site.register_admin(FileUploadApp)
 
 # 挂载后台管理系统
 site.mount_app(app)
-
-# 挂载Prometheus客户端
-# instrumentator = Instrumentator().instrument(app)
 
 
 # 文件上传API
@@ -190,9 +161,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# 注册worker路由
-app.include_router(worker_router)
 
 if __name__ == "__main__":
     import uvicorn
