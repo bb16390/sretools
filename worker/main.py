@@ -6,7 +6,6 @@ from logging import FileHandler
 
 from worker.core.settings import settings
 from worker.core.logging import AsyncFileHandler
-from worker.collector.log_collector import LogCollector
 from worker.metrics.metric_converter import MetricConverter
 from worker.communicator.central_client import CentralClient
 from worker.scheduler.task_scheduler import TaskScheduler
@@ -89,10 +88,6 @@ class Worker:
             # 启动进程监控
             self.scheduler._start_monitor()
             app_logger.info("Process monitor started")
-            
-            # 初始化日志收集器
-            self.log_collector = LogCollector()
-            app_logger.info("Log collector initialized")
             
             # 初始化指标转换器
             self.metric_converter = MetricConverter()
