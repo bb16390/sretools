@@ -6,12 +6,11 @@ from logging import FileHandler
 
 from worker.core.settings import settings
 from worker.core.logging import AsyncFileHandler
-from worker.collector.log_collector import LogCollector
 from worker.metrics.metric_converter import MetricConverter
 from worker.communicator.central_client import CentralClient
 from worker.scheduler.task_scheduler import TaskScheduler
 from worker.scheduler.trade_day_cache import TradeDayCache
-from worker.scheduler.tasks import LogCollectorTask, MetricConverterTask, DatabaseCollectorTask
+from worker.scheduler.tasks import LogCollectorTask, MetricConverterTask, DatabaseCollectorTask, KafkaCollectorTask
 
 # 配置日志系统
 log_dir = os.path.dirname(settings.log_dir)
@@ -47,8 +46,16 @@ class Worker:
             self.central_client = CentralClient()
             app_logger.info(f"Central client initialized with servers: {settings.central_servers}")
             
+            # 初始化 gRPC 客户端
+            from worker.grpc.client import CentralGrpcClient
+            self.grpc_client = CentralGrpcClient()
+            if self.grpc_client.health_check():
+                self.grpc_client.register()
+                self.grpc_client.start_communicate_stream()
+                app_logger.info("gRPC client initialized and connected")
+            
             # 初始化任务调度器
-            self.scheduler = TaskScheduler(central_client=self.central_client)
+            self.scheduler = TaskScheduler(central_client=self.central_client, grpc_client=self.grpc_client)
             app_logger.info("TaskScheduler created")
 
             # 初始化交易日缓存
@@ -71,6 +78,7 @@ class Worker:
             self.scheduler.register_task_type("log_collector", LogCollectorTask)
             self.scheduler.register_task_type("metric_converter", MetricConverterTask)
             self.scheduler.register_task_type("database_collector", DatabaseCollectorTask)
+            self.scheduler.register_task_type("kafka_collector", KafkaCollectorTask)
             app_logger.info("Task types registered with scheduler factory")
             
             # 设置 worker_id
@@ -80,10 +88,6 @@ class Worker:
             # 启动进程监控
             self.scheduler._start_monitor()
             app_logger.info("Process monitor started")
-            
-            # 初始化日志收集器
-            self.log_collector = LogCollector()
-            app_logger.info("Log collector initialized")
             
             # 初始化指标转换器
             self.metric_converter = MetricConverter()

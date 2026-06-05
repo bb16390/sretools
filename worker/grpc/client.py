@@ -197,6 +197,101 @@ class CentralGrpcClient:
             print(f"[gRPC] Error getting config: {e}")
             return None
     
+    def send_kafka_offsets(self, task_id: str, offsets: Dict[str, Dict[int, int]]) -> bool:
+        """Send Kafka offsets to master.
+        
+        Args:
+            task_id: Task ID
+            offsets: Offsets in format {topic: {partition: offset}}
+            
+        Returns:
+            bool: Success status
+        """
+        try:
+            # Build topic offsets list
+            topics_list = []
+            for topic, partitions in offsets.items():
+                partition_offsets = []
+                for partition, offset in partitions.items():
+                    partition_offsets.append(
+                        worker_pb2.KafkaPartitionOffset(
+                            partition=partition,
+                            offset=offset
+                        )
+                    )
+                topics_list.append(
+                    worker_pb2.KafkaTopicOffsets(
+                        topic=topic,
+                        partitions=partition_offsets
+                    )
+                )
+            
+            timestamp = time.time()
+            
+            # Generate signature
+            data_to_sign = {
+                "worker_id": settings.worker_id,
+                "task_id": task_id,
+                "timestamp": timestamp
+            }
+            signature = generate_signature(data_to_sign)
+            
+            request = worker_pb2.SendKafkaOffsetsRequest(
+                worker_id=settings.worker_id,
+                task_id=task_id,
+                topics=topics_list,
+                timestamp=timestamp,
+                signature=signature
+            )
+            
+            response = self.stub.SendKafkaOffsets(request)
+            
+            if response.success:
+                print(f"[gRPC] ✓ Kafka offsets sent for task {task_id}")
+            else:
+                print(f"[gRPC] Failed to send Kafka offsets: {response.message}")
+            
+            return response.success
+            
+        except Exception as e:
+            print(f"[gRPC] Error sending Kafka offsets: {e}")
+            return False
+    
+    def get_kafka_offsets(self, task_id: str) -> Optional[Dict[str, Dict[int, int]]]:
+        """Get Kafka offsets from master for a task.
+        
+        Args:
+            task_id: Task ID
+            
+        Returns:
+            Optional[Dict]: Offsets in format {topic: {partition: offset}} or None
+        """
+        try:
+            request = worker_pb2.GetKafkaOffsetsRequest(
+                worker_id=settings.worker_id,
+                task_id=task_id
+            )
+            
+            response = self.stub.GetKafkaOffsets(request)
+            
+            if response.success:
+                # Convert proto format to dict
+                offsets = {}
+                for topic_offset in response.topics:
+                    offsets[topic_offset.topic] = {}
+                    for partition_offset in topic_offset.partitions:
+                        offsets[topic_offset.topic][partition_offset.partition] = partition_offset.offset
+                
+                print(f"[gRPC] ✓ Got Kafka offsets for task {task_id}")
+                return offsets
+            else:
+                print(f"[gRPC] Failed to get Kafka offsets")
+                return None
+                
+        except Exception as e:
+            print(f"[gRPC] Error getting Kafka offsets: {e}")
+            return None
+    
     def _start_communicate_stream(self):
         """Internal method to run the bidirectional stream."""
         try:

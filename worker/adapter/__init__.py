@@ -5,6 +5,7 @@ from .sql_adapter import SqlAdapter
 from .redis_adapter import RedisAdapter
 from .clickhouse_adapter import ClickHouseAdapter
 from .influxdb_adapter import InfluxDBAdapter
+from .kafka_adapter import KafkaAdapter
 
 __all__ = [
     'AdapterManager',
@@ -14,4 +15,5 @@ __all__ = [
     'RedisAdapter',
     'ClickHouseAdapter',
     'InfluxDBAdapter',
+    'KafkaAdapter',
 ]

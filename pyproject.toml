@@ -24,6 +24,7 @@ dependencies = [
     "sqlmodelx==0.0.12",
     "croniter>=2.0.0",
     "websockets>=12.0",
+    "confluent-kafka>=2.3.0",
 ]
 
 
