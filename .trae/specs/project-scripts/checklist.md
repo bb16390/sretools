@@ -1,0 +1,13 @@
+- [x] start.sh 支持 `master` 参数启动 master 服务
+- [x] start.sh 支持 `worker` 参数启动 worker 服务
+- [x] start.sh 支持 `all` 参数按顺序启动 master 和 worker
+- [x] stop.sh 支持 `master` 参数停止 master 服务
+- [x] stop.sh 支持 `worker` 参数停止 worker 服务
+- [x] stop.sh 支持 `all` 参数按顺序停止 worker 和 master
+- [x] deploy.sh 提供交互式配置向导
+- [x] deploy.sh 支持选择部署 master
+- [x] deploy.sh 支持选择部署 worker
+- [x] deploy.sh 支持选择同时部署 master 和 worker
+- [x] deploy.sh 生成的 master/.env 包含所有 master 必要配置
+- [x] deploy.sh 生成的 worker/.env 包含所有 worker 必要配置
+- [x] 所有脚本具有可执行权限
