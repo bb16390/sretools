@@ -8,6 +8,7 @@ from .scripts.json_parser import JsonParserScript, JsonDumpsScript
 from .scripts.filter import FilterScript, ExcludeFieldsScript, PickFieldsScript
 from .scripts.aggregator import AggregatorScript, FlattenScript, UniqueScript
 from .scripts.formatter import FormatterScript, RenameFieldsScript, DateFormatScript
+from .scripts.metric_converter import MetricConverterScript
 
 TaskRegistry.register_script(JsonParserScript())
 TaskRegistry.register_script(JsonDumpsScript())
@@ -20,6 +21,7 @@ TaskRegistry.register_script(UniqueScript())
 TaskRegistry.register_script(FormatterScript())
 TaskRegistry.register_script(RenameFieldsScript())
 TaskRegistry.register_script(DateFormatScript())
+TaskRegistry.register_script(MetricConverterScript())
 
 __all__ = [
     'TransformScript',
