@@ -6,11 +6,10 @@ from logging import FileHandler
 
 from worker.core.settings import settings
 from worker.core.logging import AsyncFileHandler
-from worker.metrics.metric_converter import MetricConverter
 from worker.grpc.client import CentralGrpcClient
 from worker.scheduler.task_scheduler import TaskScheduler
 from worker.scheduler.trade_day_cache import TradeDayCache
-from worker.scheduler.tasks import LogCollectorTask, MetricConverterTask, DatabaseCollectorTask, KafkaCollectorTask
+from worker.scheduler.tasks import LogCollectorTask, DatabaseCollectorTask, KafkaCollectorTask
 
 # 配置日志系统
 log_dir = os.path.dirname(settings.log_dir)
@@ -69,7 +68,6 @@ class Worker:
             
             # 注册任务类型到调度器工厂
             self.scheduler.register_task_type("log_collector", LogCollectorTask)
-            self.scheduler.register_task_type("metric_converter", MetricConverterTask)
             self.scheduler.register_task_type("database_collector", DatabaseCollectorTask)
             self.scheduler.register_task_type("kafka_collector", KafkaCollectorTask)
             app_logger.info("Task types registered with scheduler factory")
@@ -81,10 +79,6 @@ class Worker:
             # 启动进程监控
             self.scheduler._start_monitor()
             app_logger.info("Process monitor started")
-            
-            # 初始化指标转换器
-            self.metric_converter = MetricConverter()
-            app_logger.info("Metric converter initialized")
             
             app_logger.info("Worker initialized successfully")
         except Exception as e:
