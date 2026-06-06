@@ -6,7 +6,6 @@ from logging import FileHandler
 
 from worker.core.settings import settings
 from worker.core.logging import AsyncFileHandler
-from worker.metrics.metric_converter import MetricConverter
 from worker.grpc.client import CentralGrpcClient
 from worker.scheduler.task_scheduler import TaskScheduler
 from worker.scheduler.trade_day_cache import TradeDayCache
@@ -81,10 +80,6 @@ class Worker:
             # 启动进程监控
             self.scheduler._start_monitor()
             app_logger.info("Process monitor started")
-            
-            # 初始化指标转换器
-            self.metric_converter = MetricConverter()
-            app_logger.info("Metric converter initialized")
             
             app_logger.info("Worker initialized successfully")
         except Exception as e:
