@@ -88,9 +88,6 @@
 │   ├── communicator/          # 通信模块
 │   │   ├── __init__.py
 │   │   └── central_client.py # 中心端客户端
-│   ├── metrics/               # 指标模块
-│   │   ├── __init__.py
-│   │   └── metric_converter.py  # 指标转换器
 │   ├── main.py               # 主入口文件
 │   └── run.sh                # 启动脚本
 │
@@ -285,21 +282,10 @@
   - `send_metrics()`: 发送指标到中心端
   - `get_config()`: 获取配置（支持本地缓存）
   - `_switch_server()`: 切换中心端服务器
-  - `_start_websocket()`: 启动WebSocket连接
-  - `register_message_handler()`: 注册消息处理器
+  - _start_websocket(): 启动WebSocket连接
+    - register_message_handler(): 注册消息处理器
 
-#### 2.4 指标模块 (worker/metrics/)
-
-##### MetricConverter 指标转换器
-- **文件**: [worker/metrics/metric_converter.py](file:///workspace/worker/metrics/metric_converter.py)
-- **职责**: 将日志转换为监控指标
-- **关键特性**:
-  - 支持日志到指标的转换
-  - 支持指标聚合
-  - 按指标名称和标签分组存储
-  - 多线程处理
-
-#### 2.5 主入口 (worker/main.py)
+#### 2.4 主入口 (worker/main.py)
 
 - **文件**: [worker/main.py](file:///workspace/worker/main.py)
 - **职责**: Worker的主入口
@@ -414,34 +400,7 @@ def _send_request(self, endpoint: str, data: Optional[Dict[str, Any]] = None,
 
 ---
 
-### 4. MetricConverter（指标转换器）
-
-**位置**: [worker/metrics/metric_converter.py](file:///workspace/worker/metrics/metric_converter.py#L10-L122)
-
-**功能**: 将日志转换为监控指标
-
-**关键特性**:
-- 日志到指标转换
-- 指标聚合
-- 按名称和标签分组
-
-**关键方法**:
-
-```python
-def convert_logs_to_metrics(self)  # 转换日志为指标
-```
-
-```python
-def aggregate_metrics(self)  # 聚合指标
-```
-
-```python
-def add_metric(self, metric: Dict[str, Any])  # 添加指标
-```
-
----
-
-### 5. NavPageAdmin（页面管理后台）
+### 4. NavPageAdmin（页面管理后台）
 
 **位置**: [master/index/admin.py](file:///workspace/master/index/admin.py#L17-L171)
 
@@ -465,7 +424,7 @@ async def sync_pages()  # 同步页面
 
 ---
 
-### 6. AmisPageManager（页面管理器）
+### 5. AmisPageManager（页面管理器）
 
 **位置**: [master/index/utils.py](file:///workspace/master/index/utils.py#L11-L178)
 
@@ -487,7 +446,7 @@ def update_db_pages_parent_and_sort(self, links: list[dict], parent_id: int = No
 
 ---
 
-### 7. ConnectionManager（WebSocket连接管理）
+### 6. ConnectionManager（WebSocket连接管理）
 
 **位置**: [master/worker/routes.py](file:///workspace/master/worker/routes.py#L32-L67)
 
