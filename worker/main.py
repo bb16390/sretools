@@ -41,10 +41,14 @@ class Worker:
         app_logger.info("Initializing worker...")
         
         try:
-            # 初始化 gRPC 客户端
-            self.grpc_client = CentralGrpcClient()
-            self.grpc_client.register()
-            app_logger.info("gRPC client initialized and connected")
+            # 初始化 gRPC 客户端（允许连接失败）
+            self.grpc_client = None
+            try:
+                self.grpc_client = CentralGrpcClient()
+                self.grpc_client.register()
+                app_logger.info("gRPC client initialized and connected")
+            except Exception as e:
+                app_logger.warning(f"gRPC client initialization failed (master may not be running): {e}")
             
             # 初始化任务调度器
             self.scheduler = TaskScheduler(central_client=None, grpc_client=self.grpc_client)
@@ -55,16 +59,18 @@ class Worker:
             app_logger.info("TradeDayCache initialized")
 
             # 设置交易日缓存到 gRPC 客户端
-            self.grpc_client.set_trade_day_cache(self.trade_day_cache)
-            app_logger.info("TradeDayCache set on grpc client")
+            if self.grpc_client:
+                self.grpc_client.set_trade_day_cache(self.trade_day_cache)
+                app_logger.info("TradeDayCache set on grpc client")
 
             # 将交易日缓存传递给调度器
             self.scheduler._trade_day_cache = self.trade_day_cache
             app_logger.info("TradeDayCache set on scheduler")
             
             # 注册调度器到 gRPC 客户端
-            self.grpc_client.register_task_scheduler(self.scheduler)
-            app_logger.info("TaskScheduler registered with grpc client")
+            if self.grpc_client:
+                self.grpc_client.register_task_scheduler(self.scheduler)
+                app_logger.info("TaskScheduler registered with grpc client")
             
             # 注册任务类型到调度器工厂
             self.scheduler.register_task_type("log_collector", LogCollectorTask)
@@ -96,11 +102,13 @@ class Worker:
         except KeyboardInterrupt:
             app_logger.info("Worker stopped by user")
             self.scheduler.shutdown()
-            self.grpc_client.close()
+            if self.grpc_client:
+                self.grpc_client.close()
         except Exception as e:
             app_logger.error(f"Worker error: {e}")
             self.scheduler.shutdown()
-            self.grpc_client.close()
+            if self.grpc_client:
+                self.grpc_client.close()
             raise
 
 
