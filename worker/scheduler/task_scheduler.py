@@ -151,7 +151,13 @@ class TaskScheduler:
     def report_task_status(self, task_id: str, status: str,
                            result: Any = None, duration_ms: float = 0,
                            extra: Optional[Dict[str, Any]] = None):
-        """上报任务状态到 Master"""
+        """上报任务状态到 Master。
+
+        为避免在 worker 进程（非事件循环线程）调用 asyncio 相关 API
+        而抛出 ``RuntimeError: There is no current event loop``，这里直接
+        同步调用 ``send_websocket_message``——当前 gRPC 客户端实现也是
+        同步方法。
+        """
         if self._central_client is None:
             return
 
@@ -159,7 +165,6 @@ class TaskScheduler:
         task_type = task.task_type if task else "unknown"
         execution_mode = task.execution_mode.value if task else "unknown"
 
-        import asyncio
         message = {
             "type": "task_status",
             "worker_id": getattr(self, "_worker_id", "unknown"),
@@ -174,12 +179,9 @@ class TaskScheduler:
         }
 
         try:
-            asyncio.run_coroutine_threadsafe(
-                self._central_client.send_websocket_message(message),
-                asyncio.get_event_loop(),
-            )
+            self._central_client.send_websocket_message(message)
         except Exception as e:
-            logger.error(f"Failed to report task status: {e}")
+            logger.error("Failed to report task status: %s", e)
 
     # --- 进程存活监控 ---
 

@@ -124,9 +124,8 @@ start_worker() {
     log_info "安装项目依赖..."
     cd "$PROJECT_ROOT" && pip3 install -e . -q 2>/dev/null || true
 
-    # 启动服务
-    cd "$WORKER_DIR"
-    nohup python3 main.py > "$WORKER_LOG" 2>&1 &
+    # 启动服务（从项目根目录运行，避免 worker/ 目录在 sys.path 首位）
+    nohup python3 -m worker.main > "$WORKER_LOG" 2>&1 &
     local pid=$!
     echo $pid > "$WORKER_PID_FILE"
 

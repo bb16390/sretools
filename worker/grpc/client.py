@@ -8,9 +8,9 @@ import threading
 import sys
 import os
 import json
-import asyncio
 import logging
 from typing import Dict, Any, List, Optional, Callable
+from urllib.parse import urlparse
 
 # Add the current directory to path for gRPC modules
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -25,10 +25,12 @@ except ImportError:
         version = "1.0.0"
         host = "localhost"
         port = 5001
-        central_servers = ["localhost:50051"]
+        grpc_enabled = True
+        grpc_server_address = "localhost:50051"
+        grpc_server_addresses = ["localhost:50051"]
         local_storage_path = "./data"
     settings = Settings()
-    
+
     def generate_signature(data):
         return "dummy-signature"
 
@@ -38,61 +40,149 @@ import worker_pb2_grpc
 logger = logging.getLogger(__name__)
 
 
+def _normalize_grpc_address(raw: str) -> str:
+    """把 ``http://host:port/path`` 或 ``host:port`` 规范化为 ``host:port``。
+
+    gRPC 的 insecure_channel / secure_channel 只接受 ``host:port`` 形式，
+    不能带 ``http://``、``https://`` 以及路径。
+    """
+    if raw is None:
+        return ""
+    s = raw.strip()
+    if not s:
+        return ""
+    # 如果没有 scheme，补一个以便 urlparse 正确工作
+    if "://" not in s:
+        s = "grpc://" + s
+    parsed = urlparse(s)
+    host = parsed.hostname or "localhost"
+    port = parsed.port
+    if port is None:
+        # 默认 gRPC 端口
+        port = 50051
+    return f"{host}:{port}"
+
+
+def _collect_grpc_addresses() -> List[str]:
+    """从 settings 中收集所有候选 gRPC 地址并规范化。"""
+    candidates: List[str] = []
+    # 1. 优先使用显式列表配置
+    addresses = getattr(settings, "grpc_server_addresses", None) or []
+    if isinstance(addresses, (list, tuple)):
+        candidates.extend(addresses)
+    # 2. 其次使用单个地址配置（逗号分隔也可视为多个）
+    single = getattr(settings, "grpc_server_address", None) or ""
+    if isinstance(single, str) and single:
+        candidates.extend(single.split(","))
+    # 3. 最后回退到 central_servers（兼容历史配置）
+    fallback = getattr(settings, "central_servers", None) or []
+    if isinstance(fallback, (list, tuple)):
+        candidates.extend(fallback)
+
+    normalized: List[str] = []
+    seen: set = set()
+    for c in candidates:
+        addr = _normalize_grpc_address(c)
+        if addr and addr not in seen:
+            seen.add(addr)
+            normalized.append(addr)
+    if not normalized:
+        normalized = ["localhost:50051"]
+    return normalized
+
+
 class CentralGrpcClient:
     """gRPC Client for Worker communication with Master."""
     
     def __init__(self, server_address: Optional[str] = None):
-        # Use first central server if not specified
-        self.server_address = server_address or settings.central_servers[0]
+        # 收集候选地址：显式传入 > settings.grpc_server_address(es) > settings.central_servers
+        if server_address:
+            self._candidate_addresses: List[str] = [_normalize_grpc_address(server_address)]
+        else:
+            self._candidate_addresses = _collect_grpc_addresses()
+
+        self.server_address: str = self._candidate_addresses[0]
         self.channel = None
         self.stub = None
         self.registered = False
-        
+
         # Message handlers for bidirectional stream
         self._message_handlers: Dict[str, Callable] = {}
-        
+
         # Task scheduler and trade day cache references
         self._task_scheduler = None
         self._trade_day_cache = None
-        
+
         # Local config storage
         self._local_config_path = os.path.join(settings.local_storage_path, "worker_config.json")
-        
+
         # Streaming state
         self._communicate_thread = None
         self._communicate_running = False
         self._communicate_response_iterator = None
         self._communicate_lock = threading.Lock()
-        
+
         # Heartbeat thread
         self._heartbeat_thread = None
         self._heartbeat_running = False
-        
+
         # Server health and failover
         self._server_index = 0
-        self._server_health: Dict[str, bool] = {s: True for s in settings.central_servers}
-        
-        self._connect()
-        self._start_heartbeat()
-        self.start_communicate_stream()
-    
-    def _connect(self):
+        self._server_health: Dict[str, bool] = {s: True for s in self._candidate_addresses}
+
+        # 延迟初始化：仅在显式调用 register / send_* / health_check 时建立连接
+        # 避免 master 不可用时产生大量错误日志噪音。
+        self._connected = False
+
+    def _ensure_connected(self) -> bool:
+        """惰性建立连接，失败时进行故障转移并返回是否成功。
+
+        连接成功时启动心跳与双向流线程。
+        """
+        if self._connected and self.channel is not None:
+            return True
+        return self._connect()
+
+    def _connect(self) -> bool:
         """Connect to gRPC server with failover support."""
-        max_attempts = len(settings.central_servers)
+        max_attempts = len(self._candidate_addresses)
+        last_error: Optional[Exception] = None
         for attempt in range(max_attempts):
-            server_addr = settings.central_servers[self._server_index]
+            server_addr = self._candidate_addresses[
+                (self._server_index + attempt) % len(self._candidate_addresses)
+            ]
             try:
-                self.channel = grpc.insecure_channel(server_addr)
+                # 关闭旧 channel
+                if self.channel is not None:
+                    try:
+                        self.channel.close()
+                    except Exception:
+                        pass
+                self.channel = grpc.insecure_channel(
+                    server_addr,
+                    options=[
+                        ("grpc.keepalive_time_ms", 30_000),
+                        ("grpc.keepalive_timeout_ms", 10_000),
+                        ("grpc.keepalive_permit_without_calls", 1),
+                    ],
+                )
                 self.stub = worker_pb2_grpc.WorkerServiceStub(self.channel)
-                logger.info(f"Connected to master at {server_addr}")
                 self.server_address = server_addr
+                self._server_index = (self._server_index + attempt) % len(self._candidate_addresses)
+                self._connected = True
+                logger.info("Connected to master at %s (attempt %d/%d)", server_addr, attempt + 1, max_attempts)
+                # 连接成功后再启动心跳与流线程，避免初始化阶段产生噪音
+                if not self._heartbeat_running:
+                    self._start_heartbeat()
+                if not self._communicate_running:
+                    self.start_communicate_stream()
                 return True
-            except Exception as e:
-                logger.warning(f"Failed to connect to {server_addr}: {e}")
+            except Exception as exc:
+                last_error = exc
+                logger.warning("Failed to connect to %s: %s", server_addr, exc)
                 self._server_health[server_addr] = False
-                self._server_index = (self._server_index + 1) % len(settings.central_servers)
-        
-        logger.error("Failed to connect to any master server")
+        logger.error("Failed to connect to any master server (last error: %s)", last_error)
+        self._connected = False
         return False
     
     def close(self):
@@ -105,59 +195,64 @@ class CentralGrpcClient:
     
     def health_check(self) -> bool:
         """Check if master is healthy."""
+        if not self._ensure_connected():
+            return False
         try:
             request = worker_pb2.HealthCheckRequest(service="worker")
             response = self.stub.HealthCheck(request)
             return response.status == worker_pb2.HealthCheckResponse.SERVING
         except Exception as e:
-            logger.warning(f"Health check failed: {e}")
+            logger.warning("Health check failed: %s", e)
             return False
-    
+
     def register(self) -> bool:
         """Register worker with master."""
+        if not self._ensure_connected():
+            logger.warning("Cannot register worker: master unreachable at %s", self.server_address)
+            return False
         try:
             worker_info = worker_pb2.WorkerInfo(
                 version=settings.version,
                 host=settings.host,
                 port=settings.port,
-                timestamp=time.time()
+                timestamp=time.time(),
             )
-            
+
             data_to_sign = {
                 "worker_id": settings.worker_id,
                 "info": {
                     "version": settings.version,
                     "host": settings.host,
                     "port": settings.port,
-                    "timestamp": worker_info.timestamp
-                }
+                    "timestamp": worker_info.timestamp,
+                },
             }
             signature = generate_signature(data_to_sign)
-            
+
             request = worker_pb2.RegisterRequest(
                 worker_id=settings.worker_id,
                 info=worker_info,
-                signature=signature
+                signature=signature,
             )
-            
+
             response = self.stub.RegisterWorker(request)
-            
+
             if response.success:
                 self.registered = True
-                logger.info(f"Worker {settings.worker_id} registered successfully")
+                logger.info("Worker %s registered successfully", settings.worker_id)
                 if response.config:
                     config_dict = dict(response.config)
                     self.save_config(config_dict)
-                    logger.info(f"Received config: {config_dict}")
+                    logger.info("Received config: %s", config_dict)
                 return True
             else:
-                logger.warning(f"Registration failed: {response.message}")
+                logger.warning("Registration failed: %s", response.message)
                 return False
-                
+
         except Exception as e:
-            logger.error(f"Error registering worker: {e}")
+            logger.error("Error registering worker: %s", e)
             return False
-    
+
     def _start_heartbeat(self):
         """Start heartbeat thread."""
         if self._heartbeat_running:
@@ -166,49 +261,62 @@ class CentralGrpcClient:
         self._heartbeat_thread = threading.Thread(target=self._heartbeat_loop, daemon=True)
         self._heartbeat_thread.start()
         logger.info("Heartbeat thread started")
-    
+
     def _stop_heartbeat(self):
         """Stop heartbeat thread."""
         self._heartbeat_running = False
         if self._heartbeat_thread and self._heartbeat_thread.is_alive():
             self._heartbeat_thread.join(timeout=2)
-    
+
     def _heartbeat_loop(self):
         """Send periodic heartbeats."""
+        # 为避免 master 还没连接时打日志噪音：未连接时使用较短的退避
+        backoff = 10
         while self._heartbeat_running:
             try:
+                if not self._connected:
+                    if not self._ensure_connected():
+                        # master 尚未可用，指数退避
+                        backoff = min(backoff * 2, 120)
+                        time.sleep(backoff)
+                        continue
                 self.send_heartbeat()
-                time.sleep(30)
+                backoff = 30
+                time.sleep(backoff)
             except Exception as e:
-                logger.error(f"Error in heartbeat loop: {e}")
+                logger.error("Error in heartbeat loop: %s", e)
                 time.sleep(10)
-    
+
     def send_heartbeat(self, status: str = "running") -> bool:
         """Send heartbeat to master."""
+        if not self._connected:
+            return False
         try:
             data_to_sign = {
                 "worker_id": settings.worker_id,
                 "status": status,
-                "timestamp": time.time()
+                "timestamp": time.time(),
             }
             signature = generate_signature(data_to_sign)
-            
+
             request = worker_pb2.HeartbeatRequest(
                 worker_id=settings.worker_id,
                 status=status,
                 timestamp=time.time(),
-                signature=signature
+                signature=signature,
             )
-            
+
             response = self.stub.SendHeartbeat(request)
             return response.success
-            
+
         except Exception as e:
-            logger.warning(f"Error sending heartbeat: {e}")
+            logger.warning("Error sending heartbeat: %s", e)
             return False
-    
+
     def send_logs(self, logs: List[Dict[str, Any]]) -> bool:
         """Send logs to master (client streaming)."""
+        if not self._ensure_connected():
+            return False
         try:
             def log_generator():
                 for log in logs:
@@ -216,8 +324,9 @@ class CentralGrpcClient:
                     if isinstance(ts, str):
                         try:
                             from datetime import datetime
+
                             ts = datetime.fromisoformat(ts).timestamp()
-                        except:
+                        except Exception:
                             ts = time.time()
                     yield worker_pb2.LogEntry(
                         worker_id=settings.worker_id,
@@ -225,41 +334,45 @@ class CentralGrpcClient:
                         message=log.get("message", ""),
                         source=log.get("source", "worker"),
                         timestamp=ts,
-                        metadata=log.get("metadata", {})
+                        metadata=log.get("metadata", {}),
                     )
-            
+
             response = self.stub.SendLogs(log_generator())
-            logger.debug(f"Sent {response.received_count} logs")
+            logger.debug("Sent %d logs", response.received_count)
             return response.success
-            
+
         except Exception as e:
-            logger.warning(f"Error sending logs: {e}")
+            logger.warning("Error sending logs: %s", e)
             return False
-    
+
     def send_metrics(self, metrics: List[Dict[str, Any]]) -> bool:
         """Send metrics to master (client streaming)."""
+        if not self._ensure_connected():
+            return False
         try:
             def metric_generator():
                 for metric in metrics:
                     yield worker_pb2.MetricEntry(
                         worker_id=settings.worker_id,
                         name=metric.get("name", ""),
-                        value=metric.get("value", 0.0),
+                        value=float(metric.get("value", 0.0)),
                         unit=metric.get("unit", ""),
                         timestamp=metric.get("timestamp", time.time()),
-                        labels=metric.get("labels", {})
+                        labels=metric.get("labels", {}),
                     )
-            
+
             response = self.stub.SendMetrics(metric_generator())
-            logger.debug(f"Sent {response.received_count} metrics")
+            logger.debug("Sent %d metrics", response.received_count)
             return response.success
-            
+
         except Exception as e:
-            logger.warning(f"Error sending metrics: {e}")
+            logger.warning("Error sending metrics: %s", e)
             return False
-    
+
     def get_config(self) -> Optional[Dict[str, str]]:
         """Get configuration from master."""
+        if not self._ensure_connected():
+            return self.load_config()
         try:
             request = worker_pb2.GetConfigRequest(worker_id=settings.worker_id)
             response = self.stub.GetConfig(request)
@@ -269,7 +382,7 @@ class CentralGrpcClient:
                 return config
             return None
         except Exception as e:
-            logger.warning(f"Error getting config, using local cache: {e}")
+            logger.warning("Error getting config, using local cache: %s", e)
             return self.load_config()
     
     def save_config(self, config: Dict[str, Any]):
@@ -363,53 +476,68 @@ class CentralGrpcClient:
     
     def _start_communicate_stream(self):
         """Internal method to run the bidirectional stream."""
+        backoff = 1
         while self._communicate_running:
+            # 没有连接就继续退避等待，避免 master 没启动时打大量错误日志
+            if not self._connected or self.stub is None:
+                time.sleep(backoff)
+                backoff = min(backoff * 2, 30)
+                continue
             try:
                 def message_generator():
                     ping_seq = 1
-                    while self._communicate_running:
+                    while self._communicate_running and self._connected:
                         ping = worker_pb2.Ping(sequence=ping_seq, timestamp=time.time())
                         yield worker_pb2.WorkerMessage(ping=ping)
                         ping_seq += 1
                         time.sleep(30)
-                
+
                 responses = self.stub.Communicate(message_generator())
                 self._communicate_response_iterator = responses
-                
+                backoff = 1
+
                 for master_msg in responses:
+                    if not self._communicate_running:
+                        break
                     if master_msg.HasField("pong"):
-                        logger.debug(f"Received pong: seq={master_msg.pong.sequence}")
+                        logger.debug("Received pong: seq=%s", master_msg.pong.sequence)
                     elif master_msg.HasField("config_update"):
                         config = dict(master_msg.config_update.config)
                         self.save_config(config)
-                        if "config_update" in self._message_handlers:
-                            asyncio.run_coroutine_threadsafe(
-                                self._message_handlers["config_update"]({"config": config}),
-                                asyncio.get_event_loop()
-                            )
+                        handler = self._message_handlers.get("config_update")
+                        if handler is not None:
+                            try:
+                                handler({"config": config})
+                            except Exception as exc:
+                                logger.error("config_update handler failed: %s", exc)
                     elif master_msg.HasField("task_update"):
                         task_update = {
                             "action": master_msg.task_update.action,
                             "task_id": master_msg.task_update.task_id,
                             "task_type": master_msg.task_update.task_type,
-                            "config": dict(master_msg.task_update.config)
+                            "config": dict(master_msg.task_update.config),
                         }
-                        if "task_update" in self._message_handlers:
-                            asyncio.run_coroutine_threadsafe(
-                                self._message_handlers["task_update"]({"task": task_update}),
-                                asyncio.get_event_loop()
-                            )
+                        handler = self._message_handlers.get("task_update")
+                        if handler is not None:
+                            try:
+                                handler({"task": task_update})
+                            except Exception as exc:
+                                logger.error("task_update handler failed: %s", exc)
                     elif master_msg.HasField("trade_day_data"):
                         trade_days = list(master_msg.trade_day_data.trade_days)
-                        if "trade_day_data" in self._message_handlers:
-                            asyncio.run_coroutine_threadsafe(
-                                self._message_handlers["trade_day_data"]({"trade_days": trade_days}),
-                                asyncio.get_event_loop()
-                            )
-            
+                        handler = self._message_handlers.get("trade_day_data")
+                        if handler is not None:
+                            try:
+                                handler({"trade_days": trade_days})
+                            except Exception as exc:
+                                logger.error("trade_day_data handler failed: %s", exc)
+
             except Exception as e:
-                logger.error(f"Error in communicate stream: {e}")
-                time.sleep(5)
+                # master 断线时只打一次警告，退避后重试
+                logger.warning("Communicate stream lost, reconnecting in %ds: %s", backoff, e)
+                self._connected = False
+                time.sleep(backoff)
+                backoff = min(backoff * 2, 30)
     
     def start_communicate_stream(self):
         """Start bidirectional streaming communication."""
@@ -450,31 +578,33 @@ class CentralGrpcClient:
         self.register_message_handler("trade_day_data", self._handle_trade_day_data)
         logger.info("TradeDayCache set")
     
-    async def _handle_task_update(self, data):
+    def _handle_task_update(self, data):
         """Handle task update messages."""
-        if self._task_scheduler:
-            task = data.get("task")
-            if task:
-                action = task.get("action")
-                config = task.get("config", {})
-                if action == "task_create":
-                    self._task_scheduler.create_task(task.get("task_type"), config)
-                elif action == "task_stop":
-                    self._task_scheduler.stop_task(task.get("task_id"))
-                elif action == "task_pause":
-                    self._task_scheduler.pause_task(task.get("task_id"))
-                elif action == "task_resume":
-                    self._task_scheduler.resume_task(task.get("task_id"))
-    
-    async def _handle_trade_day_data(self, data):
+        if self._task_scheduler is None:
+            return
+        task = data.get("task")
+        if not task:
+            return
+        action = task.get("action")
+        config = task.get("config", {})
+        if action == "task_create":
+            self._task_scheduler.create_task(task.get("task_type"), config)
+        elif action == "task_stop":
+            self._task_scheduler.stop_task(task.get("task_id"))
+        elif action == "task_pause":
+            self._task_scheduler.pause_task(task.get("task_id"))
+        elif action == "task_resume":
+            self._task_scheduler.resume_task(task.get("task_id"))
+
+    def _handle_trade_day_data(self, data):
         """Handle trade day data messages."""
         if self._trade_day_cache:
             self._trade_day_cache.update_trade_days_from_data(data)
-    
-    async def send_websocket_message(self, message: Dict[str, Any]):
+
+    def send_websocket_message(self, message: Dict[str, Any]) -> bool:
         """Compatibility method for sending messages (uses gRPC stream)."""
         # For now, just log the message - in a real implementation we'd use the bidirectional stream
-        logger.debug(f"Would send message: {message}")
+        logger.debug("Would send message: %s", message)
         return True
 
 
