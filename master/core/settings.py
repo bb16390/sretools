@@ -39,6 +39,9 @@ class Settings(admin.Settings):
     template_name: str = os.path.join(MASTER_DIR, "templates")
     # 安全配置
     secret_key: str = "your-secret-key-here"
+    # 网关控制
+    gateway_install_root: str = os.path.join(MASTER_DIR, "data", "gateways", "install")
+    gateway_backup_root: str = os.path.join(MASTER_DIR, "data", "gateways", "backup")
 
 
 settings = Settings()

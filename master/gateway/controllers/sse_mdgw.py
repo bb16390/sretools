@@ -1,0 +1,43 @@
+"""上交所 mdgw 网关控制器（预留实现）。"""
+from __future__ import annotations
+
+from pathlib import Path
+
+from ..core.models import (
+    DeployParams,
+    GatewayStatus,
+    OperationResult,
+    RollbackParams,
+    UpgradeParams,
+)
+from .base import GatewayControllerABC, registry
+
+
+@registry.register("sse", "mdgw")
+class SseMdgwController(GatewayControllerABC):
+    binary_name = "mdgw"
+    monitor_port_default = 7501
+
+    def preflight(self) -> OperationResult:
+        raise NotImplementedError("sse mdgw 控制器待实现")
+
+    def deploy(self, archive_path: str | Path, params: DeployParams) -> OperationResult:
+        raise NotImplementedError("sse mdgw 控制器待实现")
+
+    def start(self) -> OperationResult:
+        raise NotImplementedError("sse mdgw 控制器待实现")
+
+    def stop(self, force: bool = False) -> OperationResult:
+        raise NotImplementedError("sse mdgw 控制器待实现")
+
+    def restart(self) -> OperationResult:
+        raise NotImplementedError("sse mdgw 控制器待实现")
+
+    def upgrade(self, params: UpgradeParams) -> OperationResult:
+        raise NotImplementedError("sse mdgw 控制器待实现")
+
+    def rollback(self, params: RollbackParams | str | Path) -> OperationResult:
+        raise NotImplementedError("sse mdgw 控制器待实现")
+
+    def status(self) -> GatewayStatus:
+        raise NotImplementedError("sse mdgw 控制器待实现")

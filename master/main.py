@@ -22,6 +22,18 @@ from core.logging import AsyncFileHandler
 from core.settings import settings
 from fastapi_amis_admin.crud.schema import BaseApiOut
 
+# 网关控制
+try:
+    from gateway.admin import GatewayAdminApp
+    from gateway.api import router as gateway_router
+    GATEWAY_AVAILABLE = True
+except Exception as exc:  # noqa: BLE001
+    GATEWAY_AVAILABLE = False
+    gateway_router = None  # type: ignore[assignment]
+    GatewayAdminApp = None  # type: ignore[assignment,misc]
+    import logging as _gw_log
+    _gw_log.getLogger(__name__).warning("gateway module not available: %s", exc)
+
 # 添加 gRPC 相关导入
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "grpc"))
 try:
@@ -123,10 +135,16 @@ app = FastAPI(
 app.mount("/static", StaticFiles(directory=settings.static_dir), name="static")
 
 site.register_admin(NavPageAdmin)
+if GATEWAY_AVAILABLE:
+    site.register_admin(GatewayAdminApp)
 site.register_admin(FileUploadApp)
 
 # 挂载后台管理系统
 site.mount_app(app)
+
+# 挂载网关 HTTP API
+if GATEWAY_AVAILABLE and gateway_router is not None:
+    app.include_router(gateway_router)
 
 
 # 文件上传API
