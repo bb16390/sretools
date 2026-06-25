@@ -929,6 +929,21 @@ python -m pytest tests/ --cov=master --cov=worker
 
 ---
 
+## 更新于 2026-06-25
+
+- **feat**: 新增交易所网关统一管理模块
+  - 新增 master/gateway/ 模块：交易所网关管理（深交所mdgw/tgw完整实现，上交所/北交所预留控制器骨架）
+  - 新增 master/grpc/ 模块：gRPC 服务端实现
+  - 新增 worker/grpc/ 模块：gRPC 客户端实现
+  - 新增 worker/adapter/ 模块：数据适配器（支持Kafka、ClickHouse、InfluxDB、Redis、SQL、HTTP等）
+  - 新增 worker/scheduler/ 模块：任务调度器（日志收集、指标转换、数据库采集、交易日缓存等）
+  - 新增 worker/transformer/ 模块：数据转换器（聚合、过滤、格式化、指标转换）
+  - 新增 amis-admin 管理界面与 HTTP API
+  - 新增进程管理、配置工具与持久化存储
+  - 新增网关相关测试用例
+
+---
+
 ## 贡献指南
 
 1. Fork项目
