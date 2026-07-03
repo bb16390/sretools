@@ -2,7 +2,7 @@
 
 ## 项目概述
 
-**SRE Tools** 是一个基于 FastAPI 的站点可靠性工程（SRE）工具平台，采用主从架构设计，包含中心管理端（master）和分布式工作端（worker）两大核心模块。该平台提供了日志收集、指标转换、分布式监控、后台管理等功能。
+**SRE Tools** 是一个基于 FastAPI 的站点可靠性工程（SRE）工具平台，采用主从架构设计，包含中心管理端（master）和分布式工作端（worker）两大核心模块。该平台提供了日志收集、指标转换、分布式监控、交易所网关统一管理、后台管理等功能，支持通过 gRPC 协议进行高性能通信。
 
 ### 技术栈
 
@@ -12,7 +12,10 @@
 - **用户认证**: fastapi-user-auth 0.7.3
 - **数据库**: SQLModel 0.0.19 + SQLite/PostgreSQL
 - **异步支持**: aiosqlite、greenlet
-- **通信协议**: HTTP、WebSocket
+- **通信协议**: HTTP、WebSocket、gRPC
+- **消息队列**: Kafka
+- **缓存/存储**: Redis、InfluxDB、ClickHouse
+- **交易所网关**: 深交所(SZSE)、上交所(SSE)、北交所(BJSE)
 - **包管理**: uv
 - **测试框架**: pytest
 - **代码检查**: ruff
@@ -24,26 +27,33 @@
 ### 整体架构图
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                        SRE Tools Platform                    │
-├─────────────────────────────────────────────────────────────┤
-│                                                               │
-│  ┌──────────────────────┐      ┌──────────────────────┐    │
-│  │   Master (中心端)     │◄────►│   Worker (工作端)     │    │
-│  │                      │      │                      │    │
-│  │  - FastAPI服务        │      │  - 日志收集器         │    │
-│  │  - 管理后台           │      │  - 指标转换器         │    │
-│  │  - 用户认证           │      │  - 中心端客户端       │    │
-│  │  - 页面管理           │      │  - 本地存储           │    │
-│  │  - Worker路由         │      │  - WebSocket连接      │    │
-│  └──────────────────────┘      └──────────────────────┘    │
-│           │                              │                  │
-│           ▼                              ▼                  │
-│  ┌──────────────────────┐      ┌──────────────────────┐    │
-│  │   数据库 (SQLite/PG)  │      │   本地存储 (JSON)     │    │
-│  └──────────────────────┘      └──────────────────────┘    │
-│                                                               │
-└─────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│                        SRE Tools Platform                        │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                   │
+│  ┌─────────────────────────────┐    ┌─────────────────────────┐ │
+│  │      Master (中心端)         │◄──►│   Worker (工作端)        │ │
+│  │                             │    │                         │ │
+│  │  - FastAPI 服务             │    │  - 任务调度器           │ │
+│  │  - 管理后台 (Amis)          │    │  - gRPC 客户端          │ │
+│  │  - 用户认证                 │    │  - 适配器层             │ │
+│  │  - 页面管理                 │    │  - 数据转换层           │ │
+│  │  - 交易所网关管理           │    │  - 交易日缓存           │ │
+│  │  - gRPC 服务端              │    │                         │ │
+│  └─────────────────────────────┘    └─────────────────────────┘ │
+│           │                                    │                 │
+│           ▼                                    ▼                 │
+│  ┌─────────────────────────────┐    ┌─────────────────────────┐ │
+│  │   数据库 (SQLite/PG)        │    │   多源适配器            │ │
+│  │   网关实例存储 (JSON)       │    │  - Kafka                │ │
+│  └─────────────────────────────┘    │  - SQL/Redis            │ │
+│                                       │  - InfluxDB/ClickHouse  │ │
+│  ┌─────────────────────────────┐    │  - HTTP                 │ │
+│  │  交易所网关进程              │    └─────────────────────────┘ │
+│  │  (SZSE/SSE/BJSE)            │                                  │
+│  └─────────────────────────────┘                                  │
+│                                                                   │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
 ### 目录结构
@@ -58,23 +68,49 @@
 │   │   ├── logging.py        # 异步日志处理器
 │   │   ├── security.py       # 安全验证
 │   │   └── settings.py       # 配置管理
+│   ├── gateway/               # 交易所网关统一管理模块
+│   │   ├── admin/            # 管理后台界面
+│   │   │   └── __init__.py
+│   │   ├── api/              # HTTP API 接口
+│   │   │   └── __init__.py
+│   │   ├── controllers/      # 各交易所网关控制器
+│   │   │   ├── __init__.py
+│   │   │   ├── base.py       # 控制器抽象基类与注册中心
+│   │   │   ├── szse_mdgw.py  # 深交所行情网关
+│   │   │   ├── szse_tgw.py   # 深交所交易网关
+│   │   │   ├── sse_mdgw.py   # 上交所行情网关（预留）
+│   │   │   ├── sse_tgw.py    # 上交所交易网关（预留）
+│   │   │   ├── bjse_mdgw.py  # 北交所行情网关（预留）
+│   │   │   └── bjse_tgw.py   # 北交所交易网关（预留）
+│   │   ├── core/             # 网关核心模块
+│   │   │   ├── __init__.py
+│   │   │   ├── config_tools.py # 配置工具
+│   │   │   ├── errors.py     # 错误定义
+│   │   │   ├── models.py     # 数据模型
+│   │   │   ├── process.py    # 进程管理
+│   │   │   └── store.py      # 持久化存储
+│   │   └── __init__.py
+│   ├── grpc/                  # gRPC 服务模块
+│   │   ├── __init__.py
+│   │   ├── server.py         # gRPC 服务端
+│   │   ├── worker_pb2.py     # Protobuf 消息定义
+│   │   └── worker_pb2_grpc.py # gRPC 服务存根
 │   ├── index/                 # 页面管理模块
 │   │   ├── __init__.py
 │   │   ├── admin.py          # 页面管理后台
 │   │   ├── file_upload_admin.py  # 文件上传管理
 │   │   ├── models.py         # 数据模型
 │   │   └── utils.py          # 工具函数
+│   ├── data/                  # 数据目录
+│   │   └── gateway_instances.json # 网关实例存储
 │   ├── static/                # 静态资源
 │   │   ├── amis/             # Amis SDK
 │   │   ├── swagger/          # Swagger UI
+│   │   ├── redoc/            # ReDoc
 │   │   └── ...
 │   ├── templates/             # 模板文件
-│   ├── worker/                # Worker路由模块
-│   │   ├── __init__.py
-│   │   └── routes.py         # Worker API路由
 │   ├── main.py               # 主入口文件
-│   ├── alembic.ini           # 数据库迁移配置
-│   └── amisadmin.db          # SQLite数据库
+│   └── alembic.ini           # 数据库迁移配置
 │
 ├── worker/                    # 分布式工作端
 │   ├── core/                  # 核心模块
@@ -82,26 +118,74 @@
 │   │   ├── auth.py           # 认证工具
 │   │   ├── logging.py        # 日志处理
 │   │   └── settings.py       # 配置管理
-│   ├── collector/             # 日志收集模块
+│   ├── adapter/               # 适配器模块（数据采集与输出）
 │   │   ├── __init__.py
-│   │   └── log_collector.py  # 日志收集器
-│   ├── communicator/          # 通信模块
+│   │   ├── base.py           # 适配器基类
+│   │   ├── kafka_adapter.py  # Kafka 适配器
+│   │   ├── sql_adapter.py    # SQL 适配器
+│   │   ├── redis_adapter.py  # Redis 适配器
+│   │   ├── http_adapter.py   # HTTP 适配器
+│   │   ├── influxdb_adapter.py # InfluxDB 适配器
+│   │   └── clickhouse_adapter.py # ClickHouse 适配器
+│   ├── grpc/                  # gRPC 客户端模块
 │   │   ├── __init__.py
-│   │   └── central_client.py # 中心端客户端
+│   │   ├── client.py         # gRPC 客户端
+│   │   ├── worker_pb2.py     # Protobuf 消息定义
+│   │   └── worker_pb2_grpc.py # gRPC 服务存根
+│   ├── scheduler/             # 任务调度模块
+│   │   ├── __init__.py
+│   │   ├── base_task.py      # 任务基类
+│   │   ├── task_scheduler.py # 任务调度器
+│   │   ├── trade_day_cache.py # 交易日缓存
+│   │   └── tasks/            # 具体任务实现
+│   │       ├── __init__.py
+│   │       ├── log_collector_task.py    # 日志收集任务
+│   │       ├── metric_converter_task.py # 指标转换任务
+│   │       ├── database_collector_task.py # 数据库采集任务
+│   │       └── kafka_collector_task.py  # Kafka 采集任务
+│   ├── transformer/           # 数据转换模块
+│   │   ├── __init__.py
+│   │   ├── base.py           # 转换脚本基类
+│   │   ├── executor.py       # 转换执行器
+│   │   ├── loader.py         # 脚本加载器
+│   │   ├── registry.py       # 任务注册表
+│   │   └── scripts/          # 内置转换脚本
+│   │       ├── __init__.py
+│   │       ├── aggregator.py # 聚合脚本
+│   │       ├── filter.py     # 过滤脚本
+│   │       ├── formatter.py  # 格式化脚本
+│   │       ├── json_parser.py # JSON 解析脚本
+│   │       └── metric_converter.py # 指标转换脚本
 │   ├── main.py               # 主入口文件
 │   └── run.sh                # 启动脚本
 │
+├── protos/                    # Protobuf 定义
+│   └── worker.proto          # Worker 服务定义
+│
+├── scripts/                   # 项目脚本
+│   ├── deploy.sh             # 部署脚本
+│   ├── start.sh              # 启动脚本
+│   ├── stop.sh               # 停止脚本
+│   └── generate_grpc_code.py # gRPC 代码生成脚本
+│
 ├── tests/                     # 测试目录
 │   ├── dashboard/
+│   │   └── core/
 │   ├── worker/
+│   │   ├── core/
+│   │   └── scheduler/
+│   ├── test_gateway.py       # 网关测试
+│   ├── gateway_smoke.py      # 网关冒烟测试
 │   └── test_server.py
 │
 ├── .trae/                     # Trae配置
 │   ├── documents/            # 文档
-│   └── skills/               # 技能配置
+│   ├── skills/               # 技能配置
+│   └── specs/                # 规格说明
 │
 ├── pyproject.toml            # 项目配置
 ├── uv.lock                   # 依赖锁定文件
+├── gateway_python_dev_guide.md # 网关开发指南
 └── README.md                 # 项目说明
 ```
 
@@ -188,11 +272,95 @@
   - `update_db_pages_parent_and_sort()`: 更新页面排序和父级关系
   - `get_db_active_pages()`: 获取激活的页面列表
 
-#### 1.3 Worker路由模块 (master/worker/)
+#### 1.3 网关控制模块 (master/gateway/)
+
+##### 模块概述
+- **职责**: 提供证券交易所网关（行情 mdgw / 交易 tgw）的统一生命周期管理
+- **支持交易所**:
+  - 深交所(SZSE): mdgw + tgw（完整实现）
+  - 上交所(SSE): mdgw + tgw（预留骨架）
+  - 北交所(BJSE): mdgw + tgw（预留骨架）
+- **核心设计**: 基于注册中心模式，新增交易所只需在 `controllers/` 下新增控制器文件并通过装饰器注册
+
+##### GatewayAdminApp 网关管理后台
+- **文件**: [master/gateway/admin/__init__.py](file:///workspace/master/gateway/admin/__init__.py)
+- **职责**: 提供网关实例管理的 Amis 后台界面
+- **功能**:
+  - 网关实例的增删改查
+  - 实例运维操作：启动、停止、重启、状态查询
+  - 部署、升级、回滚操作
+  - 预检检查
+
+##### Gateway API 网关HTTP接口
+- **文件**: [master/gateway/api/__init__.py](file:///workspace/master/gateway/api/__init__.py)
+- **职责**: 提供网关管理的 RESTful API 接口
+- **主要端点**:
+  - `GET /api/gateway/instances`: 获取实例列表
+  - `POST /api/gateway/instances`: 创建实例
+  - `DELETE /api/gateway/instances/{id}`: 删除实例
+  - `POST /api/gateway/instances/{id}/start`: 启动网关
+  - `POST /api/gateway/instances/{id}/stop`: 停止网关
+  - `POST /api/gateway/instances/{id}/restart`: 重启网关
+  - `GET /api/gateway/instances/{id}/status`: 查询状态
+  - `POST /api/gateway/instances/{id}/deploy`: 部署网关
+  - `POST /api/gateway/instances/{id}/upgrade`: 升级网关
+  - `POST /api/gateway/instances/{id}/rollback`: 回滚网关
+  - `POST /api/gateway/instances/{id}/preflight`: 预检检查
+
+##### GatewayControllerABC 控制器抽象基类
+- **文件**: [master/gateway/controllers/base.py](file:///workspace/master/gateway/controllers/base.py)
+- **职责**: 定义所有网关控制器的统一接口
+- **关键抽象方法**:
+  - `preflight()`: 预检检查
+  - `deploy()`: 部署网关
+  - `start()`: 启动网关
+  - `stop()`: 停止网关
+  - `restart()`: 重启网关
+  - `upgrade()`: 升级网关
+  - `rollback()`: 回滚网关
+  - `status()`: 查询状态
+
+##### GatewayControllerRegistry 控制器注册中心
+- **文件**: [master/gateway/controllers/base.py](file:///workspace/master/gateway/controllers/base.py#L40-L80)
+- **职责**: 按 (exchange, kind) 注册和查找控制器类
+- **关键方法**:
+  - `register(exchange, kind)`: 装饰器方式注册控制器
+  - `get(exchange, kind)`: 获取控制器类
+  - `make(instance, install_root, backup_root)`: 创建控制器实例
+
+##### 网关核心子模块 (master/gateway/core/)
+- **config_tools.py**: [配置工具](file:///workspace/master/gateway/core/config_tools.py) - XML 配置文件读写
+- **errors.py**: [错误定义](file:///workspace/master/gateway/core/errors.py) - 网关相关异常类
+- **models.py**: [数据模型](file:///workspace/master/gateway/core/models.py) - GatewayInstance、DeployParams 等
+- **process.py**: [进程管理](file:///workspace/master/gateway/core/process.py) - 子进程启动/停止/监控
+- **store.py**: [持久化存储](file:///workspace/master/gateway/core/store.py) - JSON 文件存储网关实例
+
+#### 1.4 gRPC 服务模块 (master/grpc/)
+
+##### GrpcServer gRPC服务端
+- **文件**: [master/grpc/server.py](file:///workspace/master/grpc/server.py)
+- **职责**: 提供 Master 端 gRPC 服务，与 Worker 进行高性能通信
+- **关键功能**:
+  - Worker 注册与心跳
+  - 任务管理（创建/停止/查询）
+  - 配置下发
+  - 日志与指标上报
+  - 交易日信息同步
+  - 运行端口: 50051
+
+##### Protobuf 定义
+- **文件**: [protos/worker.proto](file:///workspace/protos/worker.proto)
+- **生成代码**:
+  - [master/grpc/worker_pb2.py](file:///workspace/master/grpc/worker_pb2.py) - 消息类
+  - [master/grpc/worker_pb2_grpc.py](file:///workspace/master/grpc/worker_pb2_grpc.py) - 服务存根
+
+#### 1.5 Worker路由模块 (master/worker/)
+
+> 注：原 HTTP/WS 通信方式已逐步迁移至 gRPC，当前 gRPC 为主要通信协议。
 
 ##### Worker Routes
 - **文件**: [master/worker/routes.py](file:///workspace/master/worker/routes.py)
-- **职责**: 提供Worker管理的API接口
+- **职责**: 提供Worker管理的API接口（兼容旧版HTTP接口）
 - **主要端点**:
   - `POST /api/worker/register`: Worker注册
   - `POST /api/worker/heartbeat`: 接收心跳
@@ -213,7 +381,7 @@
   - `send_personal_message()`: 发送个人消息
   - `broadcast()`: 广播消息
 
-#### 1.4 主入口 (master/main.py)
+#### 1.6 主入口 (master/main.py)
 
 - **文件**: [master/main.py](file:///workspace/master/main.py)
 - **职责**: FastAPI应用的主入口
@@ -237,10 +405,8 @@
 - **职责**: 管理Worker的所有配置项
 - **主要配置**:
   - 基本配置: host、port、debug、version、worker_id
-  - 中心端配置: central_servers（支持多个中心端）、central_timeout、central_retry_times
+  - gRPC 中心端配置: central_servers、central_timeout、central_retry_times
   - 日志配置: log_level、log_dir、error_log_dir
-  - 日志收集配置: log_collect_interval、log_batch_size、log_queue_size
-  - 指标配置: metric_collect_interval、metric_batch_size
   - 存储配置: local_storage_path、max_local_storage_size
   - 安全配置: api_key、secret_key
 
@@ -249,51 +415,120 @@
 - **职责**: 提供请求签名生成功能
 - **关键函数**: `generate_signature()` - 生成HMAC-SHA256签名
 
-#### 2.2 日志收集模块 (worker/collector/)
+##### Logging 日志处理
+- **文件**: [worker/core/logging.py](file:///workspace/worker/core/logging.py)
+- **职责**: 提供高性能的异步日志处理
+- **关键类**: `AsyncFileHandler` - 异步文件日志处理器
 
-##### LogCollector 日志收集器
-- **文件**: [worker/collector/log_collector.py](file:///workspace/worker/collector/log_collector.py)
-- **职责**: 收集和存储本地日志
+#### 2.2 gRPC 客户端模块 (worker/grpc/)
+
+##### CentralGrpcClient 中心端gRPC客户端
+- **文件**: [worker/grpc/client.py](file:///workspace/worker/grpc/client.py)
+- **职责**: 通过 gRPC 协议与中心端通信，支持故障切换
 - **关键特性**:
-  - 使用队列缓冲日志
-  - 支持批量存储
-  - 按日期分文件存储
-  - 自动清理旧文件（基于存储大小限制）
-  - 多线程处理
-
-#### 2.3 通信模块 (worker/communicator/)
-
-##### CentralClient 中心端客户端
-- **文件**: [worker/communicator/central_client.py](file:///workspace/worker/communicator/central_client.py)
-- **职责**: 与中心端通信，支持故障切换
-- **关键特性**:
-  - 支持多个中心端服务器
-  - 自动健康检查
-  - 自动故障切换
-  - WebSocket实时通信
-  - 指数退避重连策略
-  - 心跳保活
+  - 多中心端服务器支持
+  - 自动健康检查与故障切换
+  - 流式心跳保活
+  - 任务管理（创建/停止/查询）
+  - 交易日信息同步
   - 本地配置缓存
 
 ##### 关键方法:
   - `register()`: 注册Worker到中心端
   - `send_heartbeat()`: 发送心跳
-  - `send_logs()`: 发送日志到中心端
-  - `send_metrics()`: 发送指标到中心端
-  - `get_config()`: 获取配置（支持本地缓存）
-  - `_switch_server()`: 切换中心端服务器
-  - _start_websocket(): 启动WebSocket连接
-    - register_message_handler(): 注册消息处理器
+  - `create_task()`: 创建任务
+  - `stop_task()`: 停止任务
+  - `get_config()`: 获取配置
+  - `report_logs()`: 上报日志
+  - `report_metrics()`: 上报指标
 
-#### 2.4 主入口 (worker/main.py)
+#### 2.3 任务调度模块 (worker/scheduler/)
+
+##### TaskScheduler 任务调度器
+- **文件**: [worker/scheduler/task_scheduler.py](file:///workspace/worker/scheduler/task_scheduler.py)
+- **职责**: 管理 Worker 端所有采集/转换任务的生命周期
+- **关键功能**:
+  - 任务类型工厂注册
+  - 任务创建、启动、停止
+  - 任务状态监控
+  - 进程存活监控
+  - 支持多种执行模式（周期执行、持续运行）
+
+##### BaseTask 任务基类
+- **文件**: [worker/scheduler/base_task.py](file:///workspace/worker/scheduler/base_task.py)
+- **职责**: 定义所有任务的统一接口和生命周期
+- **执行模式**:
+  - `PERIODIC`: 周期性执行
+  - `CONTINUOUS`: 持续运行
+
+##### TradeDayCache 交易日缓存
+- **文件**: [worker/scheduler/trade_day_cache.py](file:///workspace/worker/scheduler/trade_day_cache.py)
+- **职责**: 缓存交易日信息，支持按交易日调度任务
+- **关键功能**:
+  - 从中心端同步交易日历
+  - 本地缓存
+  - 交易日判断
+
+##### 内置任务类型 (worker/scheduler/tasks/)
+- **LogCollectorTask**: [日志收集任务](file:///workspace/worker/scheduler/tasks/log_collector_task.py)
+- **MetricConverterTask**: [指标转换任务](file:///workspace/worker/scheduler/tasks/metric_converter_task.py)
+- **DatabaseCollectorTask**: [数据库采集任务](file:///workspace/worker/scheduler/tasks/database_collector_task.py) - 支持交易日调度
+- **KafkaCollectorTask**: [Kafka采集任务](file:///workspace/worker/scheduler/tasks/kafka_collector_task.py)
+
+#### 2.4 适配器模块 (worker/adapter/)
+
+##### AsyncBaseAdapter 适配器基类
+- **文件**: [worker/adapter/base.py](file:///workspace/worker/adapter/base.py)
+- **职责**: 定义数据采集/输出适配器的统一接口
+- **关键功能**:
+  - 异步上下文管理
+  - 数据转换集成（与 transformer 模块联动）
+  - 转换链支持
+
+##### 内置适配器
+- **KafkaAdapter**: [Kafka 适配器](file:///workspace/worker/adapter/kafka_adapter.py) - Kafka 消息队列读写
+- **SqlAdapter**: [SQL 适配器](file:///workspace/worker/adapter/sql_adapter.py) - 关系型数据库读写
+- **RedisAdapter**: [Redis 适配器](file:///workspace/worker/adapter/redis_adapter.py) - Redis 缓存读写
+- **HttpAdapter**: [HTTP 适配器](file:///workspace/worker/adapter/http_adapter.py) - HTTP 接口调用
+- **InfluxDBAdapter**: [InfluxDB 适配器](file:///workspace/worker/adapter/influxdb_adapter.py) - 时序数据库读写
+- **ClickHouseAdapter**: [ClickHouse 适配器](file:///workspace/worker/adapter/clickhouse_adapter.py) - OLAP 数据库读写
+
+#### 2.5 数据转换模块 (worker/transformer/)
+
+##### TransformScript 转换脚本基类
+- **文件**: [worker/transformer/base.py](file:///workspace/worker/transformer/base.py)
+- **职责**: 定义数据转换脚本的统一接口
+- **关键方法**:
+  - `transform(data, config)`: 执行数据转换
+  - `validate_config(config)`: 验证配置参数
+
+##### TaskRegistry 任务注册表
+- **文件**: [worker/transformer/registry.py](file:///workspace/worker/transformer/registry.py)
+- **职责**: 单例模式的转换脚本注册中心
+- **功能**: 脚本注册、查找、任务配置管理
+
+##### TransformExecutor 转换执行器
+- **文件**: [worker/transformer/executor.py](file:///workspace/worker/transformer/executor.py)
+- **职责**: 执行单个转换任务，支持链式调用
+
+##### 内置转换脚本 (worker/transformer/scripts/)
+- **Aggregator**: [聚合脚本](file:///workspace/worker/transformer/scripts/aggregator.py) - 数据聚合
+- **Filter**: [过滤脚本](file:///workspace/worker/transformer/scripts/filter.py) - 数据过滤
+- **Formatter**: [格式化脚本](file:///workspace/worker/transformer/scripts/formatter.py) - 数据格式化
+- **JsonParser**: [JSON解析脚本](file:///workspace/worker/transformer/scripts/json_parser.py) - JSON 解析
+- **MetricConverter**: [指标转换脚本](file:///workspace/worker/transformer/scripts/metric_converter.py) - 指标格式转换
+
+#### 2.6 主入口 (worker/main.py)
 
 - **文件**: [worker/main.py](file:///workspace/worker/main.py)
 - **职责**: Worker的主入口
 - **关键类**: `Worker`
-  - 初始化中心端客户端
-  - 初始化日志收集器
-  - 初始化指标转换器
+  - 初始化 gRPC 客户端
+  - 初始化任务调度器
+  - 初始化交易日缓存
+  - 注册任务类型
   - 运行主循环
+  - 优雅关闭处理
 
 ---
 
@@ -519,6 +754,13 @@ async def broadcast(self, message: Dict[str, Any])  # 广播消息
 | pydantic-settings | ≥2.13.1 | 配置管理 |
 | requests | ≥2.33.1 | HTTP客户端 |
 | websockets | ≥12.0 | WebSocket客户端 |
+| grpcio | ≥1.60.0 | gRPC通信 |
+| grpcio-tools | ≥1.60.0 | gRPC代码生成 |
+| protobuf | ≥4.25.0 | Protobuf序列化 |
+| aiokafka | ≥0.10.0 | 异步Kafka客户端 |
+| redis | ≥5.0.0 | Redis客户端 |
+| influxdb-client | ≥1.36.0 | InfluxDB客户端 |
+| clickhouse-driver | ≥0.2.0 | ClickHouse客户端 |
 
 #### 开发依赖
 | 依赖包 | 版本 | 用途 |
@@ -677,11 +919,59 @@ ruff format .
 - Iframe (5): Iframe页面
 - Custom (6): 自定义页面
 
+### GatewayInstance（网关实例）
+
+**位置**: [master/gateway/core/models.py](file:///workspace/master/gateway/core/models.py#L13-L23)
+
+**存储**: JSON 文件（[master/data/gateway_instances.json](file:///workspace/master/data/gateway_instances.json)）
+
+**字段说明**:
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | str | 实例ID |
+| exchange | str | 交易所代码（szse/sse/bjse） |
+| kind | str | 网关类型（mdgw/tgw） |
+| name | str | 实例名称 |
+| gateway_dir | str | 网关安装目录 |
+| binary_name | str | 二进制文件名 |
+| monitor_port | int | 监控端口 |
+| version | str/None | 版本号 |
+| created_at | datetime | 创建时间 |
+
+### 其他网关数据模型
+
+**位置**: [master/gateway/core/models.py](file:///workspace/master/gateway/core/models.py)
+
+| 模型 | 说明 |
+|------|------|
+| DeployParams | 部署参数 |
+| UpgradeParams | 升级参数 |
+| RollbackParams | 回滚参数 |
+| OperationResult | 操作结果 |
+| GatewayStatus | 网关运行状态 |
+
 ---
 
 ## API接口说明
 
 ### Master API
+
+#### 网关管理接口
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | /api/gateway/instances | 获取网关实例列表 |
+| POST | /api/gateway/instances | 创建网关实例 |
+| DELETE | /api/gateway/instances/{id} | 删除网关实例 |
+| POST | /api/gateway/instances/{id}/start | 启动网关 |
+| POST | /api/gateway/instances/{id}/stop | 停止网关 |
+| POST | /api/gateway/instances/{id}/restart | 重启网关 |
+| GET | /api/gateway/instances/{id}/status | 查询网关状态 |
+| POST | /api/gateway/instances/{id}/deploy | 部署网关 |
+| POST | /api/gateway/instances/{id}/upgrade | 升级网关 |
+| POST | /api/gateway/instances/{id}/rollback | 回滚网关 |
+| POST | /api/gateway/instances/{id}/preflight | 预检检查 |
 
 #### Worker管理接口
 
@@ -703,6 +993,20 @@ ruff format .
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | POST | /api/file-upload/submit | 文件上传提交 |
+
+### gRPC 接口 (Master:50051)
+
+| 服务 | 方法 | 说明 |
+|------|------|------|
+| WorkerService | Register | Worker注册 |
+| WorkerService | Heartbeat | 流式心跳保活 |
+| WorkerService | GetConfig | 获取配置 |
+| WorkerService | CreateTask | 创建任务 |
+| WorkerService | StopTask | 停止任务 |
+| WorkerService | ListTasks | 查询任务列表 |
+| WorkerService | ReportLogs | 上报日志 |
+| WorkerService | ReportMetrics | 上报指标 |
+| WorkerService | GetTradeDays | 获取交易日信息 |
 
 ---
 
@@ -845,8 +1149,13 @@ tests/
 │       ├── test_logging.py           # 日志测试
 │       └── test_logging_performance.py  # 日志性能测试
 ├── worker/
-│   └── core/
-│       └── test_settings.py          # 配置测试
+│   ├── core/
+│   │   └── test_settings.py          # 配置测试
+│   └── scheduler/
+│       ├── test_trade_day_cache.py   # 交易日缓存测试
+│       └── test_database_collector_task_trade_day.py  # 交易日调度测试
+├── test_gateway.py                   # 网关功能测试
+├── gateway_smoke.py                  # 网关冒烟测试
 └── test_server.py                    # 服务器测试
 ```
 
@@ -921,6 +1230,16 @@ python -m pytest tests/ --cov=master --cov=worker
 
 ## 版本历史
 
+- **v0.2.0**: 新增交易所网关统一管理与 gRPC 通信
+  - 新增深交所(SZSE) mdgw/tgw 完整网关控制
+  - 新增上交所/北交所网关控制器骨架
+  - 新增网关管理后台界面（基于 Amis）
+  - 新增网关 HTTP API 接口
+  - 新增 gRPC 通信协议（Master 服务端 + Worker 客户端）
+  - 重构 Worker 架构：任务调度器 + 适配器 + 数据转换三层
+  - 新增交易日缓存与交易日调度支持
+  - 新增多源适配器（Kafka/SQL/Redis/HTTP/InfluxDB/ClickHouse）
+
 - **v0.1.0**: 初始版本
   - 基础管理后台
   - Worker基础功能
@@ -947,3 +1266,18 @@ python -m pytest tests/ --cov=master --cov=worker
 ## 联系方式
 
 如有问题或建议，请提交Issue或Pull Request。
+
+---
+
+## 更新于 2026-07-03
+
+- 新增交易所网关统一管理模块（master/gateway/），支持深交所 mdgw/tgw 完整生命周期管理
+- 新增网关管理后台界面与 HTTP API 接口
+- 新增 gRPC 通信协议，Master 端提供 gRPC 服务（端口 50051），Worker 端通过 gRPC 客户端通信
+- 重构 Worker 架构为三层：任务调度层(scheduler)、适配器层(adapter)、数据转换层(transformer)
+- 新增交易日缓存(TradeDayCache)与交易日调度支持
+- 新增多源数据适配器：Kafka、SQL、Redis、HTTP、InfluxDB、ClickHouse
+- 新增内置数据转换脚本：聚合、过滤、格式化、JSON解析、指标转换
+- 更新项目目录结构与核心模块说明文档
+- 新增网关相关数据模型说明与 API 接口文档
+- 更新版本历史至 v0.2.0
