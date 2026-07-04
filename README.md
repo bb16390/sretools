@@ -354,34 +354,7 @@
   - [master/grpc/worker_pb2.py](file:///workspace/master/grpc/worker_pb2.py) - 消息类
   - [master/grpc/worker_pb2_grpc.py](file:///workspace/master/grpc/worker_pb2_grpc.py) - 服务存根
 
-#### 1.5 Worker路由模块 (master/worker/)
-
-> 注：原 HTTP/WS 通信方式已逐步迁移至 gRPC，当前 gRPC 为主要通信协议。
-
-##### Worker Routes
-- **文件**: [master/worker/routes.py](file:///workspace/master/worker/routes.py)
-- **职责**: 提供Worker管理的API接口（兼容旧版HTTP接口）
-- **主要端点**:
-  - `POST /api/worker/register`: Worker注册
-  - `POST /api/worker/heartbeat`: 接收心跳
-  - `GET /api/worker/config`: 获取配置
-  - `POST /api/worker/logs`: 接收日志
-  - `POST /api/worker/metrics`: 接收指标
-  - `GET /api/worker/list`: 获取Worker列表
-  - `GET /api/worker/health`: 健康检查
-  - `WebSocket /api/worker/ws/{worker_id}`: WebSocket连接
-  - `POST /api/worker/update-config`: 更新配置
-  - `POST /api/worker/update-task`: 更新任务
-
-##### ConnectionManager WebSocket连接管理
-- **职责**: 管理Worker的WebSocket连接
-- **关键方法**:
-  - `connect()`: 建立连接
-  - `disconnect()`: 断开连接
-  - `send_personal_message()`: 发送个人消息
-  - `broadcast()`: 广播消息
-
-#### 1.6 主入口 (master/main.py)
+#### 1.5 主入口 (master/main.py)
 
 - **文件**: [master/main.py](file:///workspace/master/main.py)
 - **职责**: FastAPI应用的主入口
@@ -564,50 +537,18 @@ def close(self)  # 优雅关闭，确保日志不丢失
 
 ---
 
-### 2. LogCollector（日志收集器）
+### 2. CentralGrpcClient（中心端gRPC客户端）
 
-**位置**: [worker/collector/log_collector.py](file:///workspace/worker/collector/log_collector.py#L12-L133)
+**位置**: [worker/grpc/client.py](file:///workspace/worker/grpc/client.py)
 
-**功能**: 收集和存储本地日志
-
-**关键特性**:
-- 队列缓冲
-- 批量存储
-- 按日期分文件
-- 自动清理旧文件
-
-**关键方法**:
-
-```python
-def collect_logs(self)  # 收集日志的主循环
-```
-
-```python
-def store_logs(self)  # 存储日志到本地
-```
-
-```python
-def save_to_local(self, logs: List[Dict[str, Any]])  # 保存日志到文件
-```
-
-```python
-def check_storage_size(self)  # 检查并清理存储
-```
-
----
-
-### 3. CentralClient（中心端客户端）
-
-**位置**: [worker/communicator/central_client.py](file:///workspace/worker/communicator/central_client.py#L15-L416)
-
-**功能**: 与中心端通信，支持故障切换和WebSocket实时通信
+**功能**: 通过 gRPC 协议与中心端通信，支持故障切换
 
 **关键特性**:
-- 多中心端支持
-- 自动健康检查
-- 自动故障切换
-- WebSocket实时通信
-- 指数退避重连
+- 多中心端服务器支持
+- 自动健康检查与故障切换
+- 流式心跳保活
+- 任务管理（创建/停止/查询）
+- 交易日信息同步
 - 本地配置缓存
 
 **关键方法**:
@@ -621,23 +562,22 @@ def send_heartbeat(self)  # 发送心跳
 ```
 
 ```python
-def _switch_server(self)  # 切换中心端服务器
+def create_task(self)  # 创建任务
 ```
 
 ```python
-async def _connect_websocket(self)  # 连接WebSocket
+def stop_task(self)  # 停止任务
 ```
 
 ```python
-def _send_request(self, endpoint: str, data: Optional[Dict[str, Any]] = None, 
-                  method: str = "POST")  # 发送请求（支持自动切换）
+def get_config(self)  # 获取配置
 ```
 
 ---
 
-### 4. NavPageAdmin（页面管理后台）
+### 3. NavPageAdmin（页面管理后台）
 
-**位置**: [master/index/admin.py](file:///workspace/master/index/admin.py#L17-L171)
+**位置**: [master/index/admin.py](file:///workspace/master/index/admin.py)
 
 **功能**: 提供页面管理的后台界面
 
@@ -659,9 +599,9 @@ async def sync_pages()  # 同步页面
 
 ---
 
-### 5. AmisPageManager（页面管理器）
+### 4. AmisPageManager（页面管理器）
 
-**位置**: [master/index/utils.py](file:///workspace/master/index/utils.py#L11-L178)
+**位置**: [master/index/utils.py](file:///workspace/master/index/utils.py)
 
 **功能**: 管理页面在数据库和站点之间的同步
 
@@ -677,28 +617,6 @@ def db_to_site(self, admin_group: AdminGroup)  # 数据库→站点
 
 ```python
 def update_db_pages_parent_and_sort(self, links: list[dict], parent_id: int = None)  # 更新排序
-```
-
----
-
-### 6. ConnectionManager（WebSocket连接管理）
-
-**位置**: [master/worker/routes.py](file:///workspace/master/worker/routes.py#L32-L67)
-
-**功能**: 管理Worker的WebSocket连接
-
-**关键方法**:
-
-```python
-async def connect(self, worker_id: str, websocket: WebSocket)  # 建立连接
-```
-
-```python
-async def send_personal_message(self, message: Dict[str, Any], worker_id: str)  # 发送消息
-```
-
-```python
-async def broadcast(self, message: Dict[str, Any])  # 广播消息
 ```
 
 ---
@@ -1268,6 +1186,14 @@ python -m pytest tests/ --cov=master --cov=worker
 如有问题或建议，请提交Issue或Pull Request。
 
 ---
+
+## 更新于 2026-07-04
+
+- 修复文档中指向不存在目录的引用：删除 master/worker/ 路由模块章节（已迁移至 gRPC）
+- 更新关键类与函数说明：将旧版 LogCollector/central_client 替换为新架构的 CentralGrpcClient
+- 删除不存在的 ConnectionManager WebSocket 管理说明（已迁移至 gRPC 通信）
+- 更新关键类编号（原6个类调整为4个）
+- 修复文档中指向不存在文件的链接引用
 
 ## 更新于 2026-07-03
 
