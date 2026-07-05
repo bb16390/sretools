@@ -339,13 +339,14 @@
 
 ##### GrpcServer gRPC服务端
 - **文件**: [master/grpc/server.py](file:///workspace/master/grpc/server.py)
-- **职责**: 提供 Master 端 gRPC 服务，与 Worker 进行高性能通信
+- **职责**: 提供 Master 端 gRPC 服务，与 Worker 进行高性能通信（与 HTTP API 并行运行）
 - **关键功能**:
   - Worker 注册与心跳
-  - 任务管理（创建/停止/查询）
+  - 日志与指标上报（客户端流式）
+  - Kafka偏移量管理（存储与查询）
   - 配置下发
-  - 日志与指标上报
-  - 交易日信息同步
+  - 双向流式实时通信（替代WebSocket）
+  - 健康检查
   - 运行端口: 50051
 
 ##### Protobuf 定义
@@ -409,11 +410,13 @@
 ##### 关键方法:
   - `register()`: 注册Worker到中心端
   - `send_heartbeat()`: 发送心跳
-  - `create_task()`: 创建任务
-  - `stop_task()`: 停止任务
+  - `send_logs()`: 上报日志（客户端流式）
+  - `send_metrics()`: 上报指标（客户端流式）
+  - `send_kafka_offsets()`: 发送Kafka偏移量
+  - `get_kafka_offsets()`: 获取Kafka偏移量
   - `get_config()`: 获取配置
-  - `report_logs()`: 上报日志
-  - `report_metrics()`: 上报指标
+  - `health_check()`: 健康检查
+  - `start_communicate_stream()`: 启动双向流式通信
 
 #### 2.3 任务调度模块 (worker/scheduler/)
 
@@ -541,15 +544,17 @@ def close(self)  # 优雅关闭，确保日志不丢失
 
 **位置**: [worker/grpc/client.py](file:///workspace/worker/grpc/client.py)
 
-**功能**: 通过 gRPC 协议与中心端通信，支持故障切换
+**功能**: 通过 gRPC 协议与中心端通信，支持故障切换和延迟初始化
 
 **关键特性**:
 - 多中心端服务器支持
 - 自动健康检查与故障切换
-- 流式心跳保活
-- 任务管理（创建/停止/查询）
+- 流式心跳保活（独立线程）
+- 双向流式实时通信（替代WebSocket）
+- Kafka偏移量管理（存储与查询）
 - 交易日信息同步
-- 本地配置缓存
+- 本地配置缓存（离线支持）
+- 延迟初始化（避免启动时大量错误日志）
 
 **关键方法**:
 
@@ -562,15 +567,31 @@ def send_heartbeat(self)  # 发送心跳
 ```
 
 ```python
-def create_task(self)  # 创建任务
+def send_logs(self)  # 上报日志（客户端流式）
 ```
 
 ```python
-def stop_task(self)  # 停止任务
+def send_metrics(self)  # 上报指标（客户端流式）
+```
+
+```python
+def send_kafka_offsets(self)  # 发送Kafka偏移量
+```
+
+```python
+def get_kafka_offsets(self)  # 获取Kafka偏移量
 ```
 
 ```python
 def get_config(self)  # 获取配置
+```
+
+```python
+def health_check(self)  # 健康检查
+```
+
+```python
+def start_communicate_stream(self)  # 启动双向流式通信
 ```
 
 ---
@@ -916,15 +937,15 @@ ruff format .
 
 | 服务 | 方法 | 说明 |
 |------|------|------|
-| WorkerService | Register | Worker注册 |
-| WorkerService | Heartbeat | 流式心跳保活 |
+| WorkerService | RegisterWorker | Worker注册 |
+| WorkerService | SendHeartbeat | 发送心跳 |
+| WorkerService | SendLogs | 上报日志（客户端流式） |
+| WorkerService | SendMetrics | 上报指标（客户端流式） |
+| WorkerService | SendKafkaOffsets | 发送Kafka偏移量 |
+| WorkerService | GetKafkaOffsets | 获取Kafka偏移量 |
 | WorkerService | GetConfig | 获取配置 |
-| WorkerService | CreateTask | 创建任务 |
-| WorkerService | StopTask | 停止任务 |
-| WorkerService | ListTasks | 查询任务列表 |
-| WorkerService | ReportLogs | 上报日志 |
-| WorkerService | ReportMetrics | 上报指标 |
-| WorkerService | GetTradeDays | 获取交易日信息 |
+| WorkerService | HealthCheck | 健康检查 |
+| WorkerService | Communicate | 双向流式实时通信（替代WebSocket） |
 
 ---
 
@@ -1207,3 +1228,12 @@ python -m pytest tests/ --cov=master --cov=worker
 - 更新项目目录结构与核心模块说明文档
 - 新增网关相关数据模型说明与 API 接口文档
 - 更新版本历史至 v0.2.0
+
+## 更新于 2026-07-05
+
+- 更新 gRPC 接口文档，修正方法名称与实际代码一致（Register→RegisterWorker, Heartbeat→SendHeartbeat）
+- 新增 Kafka 偏移量管理接口（SendKafkaOffsets、GetKafkaOffsets）
+- 新增 HealthCheck 健康检查接口
+- 新增 Communicate 双向流式实时通信接口（替代WebSocket）
+- 更新 CentralGrpcClient 描述，添加延迟初始化、本地配置缓存等新特性
+- 更新 Master gRPC 服务端描述，明确与 HTTP API 并行运行架构
