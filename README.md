@@ -1208,6 +1208,30 @@ python -m pytest tests/ --cov=master --cov=worker
 
 ---
 
+## 更新于 2026-07-08
+
+- 今日无代码变更，项目运行正常
+- 验证 README.md 文档与实际代码一致性，确认所有模块、类、接口描述准确无误
+
+## 更新于 2026-07-07
+
+- 今日无代码变更，项目运行正常
+- 验证 README.md 文档与实际代码一致性，确认所有模块、类、接口描述准确无误
+
+## 更新于 2026-07-06
+
+- 今日无代码变更，项目运行正常
+- 验证 README.md 文档与实际代码一致性，确认所有模块、类、接口描述准确无误
+
+## 更新于 2026-07-05
+
+- 更新 gRPC 接口文档，修正方法名称与实际代码一致（Register→RegisterWorker, Heartbeat→SendHeartbeat）
+- 新增 Kafka 偏移量管理接口（SendKafkaOffsets、GetKafkaOffsets）
+- 新增 HealthCheck 健康检查接口
+- 新增 Communicate 双向流式实时通信接口（替代WebSocket）
+- 更新 CentralGrpcClient 描述，添加延迟初始化、本地配置缓存等新特性
+- 更新 Master gRPC 服务端描述，明确与 HTTP API 并行运行架构
+
 ## 更新于 2026-07-04
 
 - 修复文档中指向不存在目录的引用：删除 master/worker/ 路由模块章节（已迁移至 gRPC）
@@ -1228,22 +1252,3 @@ python -m pytest tests/ --cov=master --cov=worker
 - 更新项目目录结构与核心模块说明文档
 - 新增网关相关数据模型说明与 API 接口文档
 - 更新版本历史至 v0.2.0
-
-## 更新于 2026-07-07
-
-- 今日无代码变更，项目运行正常
-- 验证 README.md 文档与实际代码一致性，确认所有模块、类、接口描述准确无误
-
-## 更新于 2026-07-06
-
-- 今日无代码变更，项目运行正常
-- 验证 README.md 文档与实际代码一致性，确认所有模块、类、接口描述准确无误
-
-## 更新于 2026-07-05
-
-- 更新 gRPC 接口文档，修正方法名称与实际代码一致（Register→RegisterWorker, Heartbeat→SendHeartbeat）
-- 新增 Kafka 偏移量管理接口（SendKafkaOffsets、GetKafkaOffsets）
-- 新增 HealthCheck 健康检查接口
-- 新增 Communicate 双向流式实时通信接口（替代WebSocket）
-- 更新 CentralGrpcClient 描述，添加延迟初始化、本地配置缓存等新特性
-- 更新 Master gRPC 服务端描述，明确与 HTTP API 并行运行架构
