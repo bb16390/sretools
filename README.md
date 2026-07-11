@@ -1208,6 +1208,12 @@ python -m pytest tests/ --cov=master --cov=worker
 
 ---
 
+## 更新于 2026-07-11
+
+- 今日无代码变更，项目运行正常
+- 验证 README.md 文档与实际代码一致性，确认所有模块、类、接口描述准确无误
+- 抽检核心模块文件：master/core、master/gateway、worker/scheduler、worker/adapter，文档结构与实际文件一致
+
 ## 更新于 2026-07-10
 
 - 今日无代码变更，项目运行正常
