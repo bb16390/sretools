@@ -386,8 +386,10 @@
 
 ##### Auth 认证工具
 - **文件**: [worker/core/auth.py](file:///workspace/worker/core/auth.py)
-- **职责**: 提供请求签名生成功能
-- **关键函数**: `generate_signature()` - 生成HMAC-SHA256签名
+- **职责**: 提供请求签名生成与验证功能
+- **关键函数**: 
+  - `generate_signature(data)` - 生成HMAC-SHA256签名（直接从settings获取secret_key）
+  - `verify_signature(data, signature)` - 验证请求签名（包含时间戳校验，有效期5分钟）
 
 ##### Logging 日志处理
 - **文件**: [worker/core/logging.py](file:///workspace/worker/core/logging.py)
@@ -964,6 +966,10 @@ ruff format .
 2. 服务端验证时间戳（5分钟内有效）
 3. 服务端验证签名
 
+**函数差异**:
+- Master端：`generate_signature(data, secret_key)`、`verify_signature(data, signature, secret_key)` - 需要显式传入secret_key参数
+- Worker端：`generate_signature(data)`、`verify_signature(data, signature)` - 直接从settings获取secret_key
+
 ### 2. 用户认证
 
 **实现**: fastapi-user-auth
@@ -1207,6 +1213,13 @@ python -m pytest tests/ --cov=master --cov=worker
 如有问题或建议，请提交Issue或Pull Request。
 
 ---
+
+## 更新于 2026-07-14
+
+- Worker 端 auth.py 新增 `verify_signature()` 函数，支持请求签名验证（包含时间戳校验，有效期5分钟）
+- 更新 Worker Auth 认证工具文档，补充新函数说明
+- 更新安全机制章节，添加 Master/Worker 签名函数参数差异说明
+- 验证 README.md 文档与实际代码一致性
 
 ## 更新于 2026-07-13
 
