@@ -1214,6 +1214,12 @@ python -m pytest tests/ --cov=master --cov=worker
 
 ---
 
+## 更新于 2026-07-15
+
+- 今日无代码变更，项目运行正常
+- 验证 README.md 文档与实际代码一致性，确认所有模块、类、接口描述准确无误
+- 抽检核心模块文件：master/core/logging.py、master/grpc/server.py、worker/grpc/client.py、worker/core/auth.py、master/core/security.py，文档结构与实际文件一致
+
 ## 更新于 2026-07-14
 
 - Worker 端 auth.py 新增 `verify_signature()` 函数，支持请求签名验证（包含时间戳校验，有效期5分钟）
