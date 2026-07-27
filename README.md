@@ -698,10 +698,13 @@ def update_db_pages_parent_and_sort(self, links: list[dict], parent_id: int = No
 | grpcio | ≥1.60.0 | gRPC通信 |
 | grpcio-tools | ≥1.60.0 | gRPC代码生成 |
 | protobuf | ≥4.25.0 | Protobuf序列化 |
-| aiokafka | ≥0.10.0 | 异步Kafka客户端 |
+| confluent-kafka | ≥2.3.0 | Kafka客户端（librdkafka封装） |
 | redis | ≥5.0.0 | Redis客户端 |
-| influxdb-client | ≥1.36.0 | InfluxDB客户端 |
-| clickhouse-driver | ≥0.2.0 | ClickHouse客户端 |
+| influxdb-client | ≥1.40.0 | InfluxDB客户端 |
+| asynch | ≥0.2.0 | 异步ClickHouse客户端 |
+| aiohttp | ≥3.9.0 | 异步HTTP客户端 |
+| sqlalchemy | ≥2.0.0 | ORM框架底层 |
+| croniter | ≥2.0.0 | Cron表达式解析 |
 
 #### 开发依赖
 | 依赖包 | 版本 | 用途 |
@@ -1213,6 +1216,15 @@ python -m pytest tests/ --cov=master --cov=worker
 如有问题或建议，请提交Issue或Pull Request。
 
 ---
+
+## 更新于 2026-07-27
+
+- 修正依赖列表与实际代码一致性：将 aiokafka 替换为 confluent-kafka（≥2.3.0），将 clickhouse-driver 替换为 asynch（≥0.2.0）
+- 补充实际使用但文档缺失的依赖：aiohttp、sqlalchemy、croniter
+- 更新 influxdb-client 版本号（≥1.36.0 → ≥1.40.0）
+- 验证 README.md 文档与实际代码一致性，确认所有模块、类、接口描述准确无误
+- 抽检 worker/adapter、worker/transformer、master/gateway、master/grpc 目录，文档结构与实际文件一致
+- 确认自上次提交（798587e, 2026-07-26）以来工作树无新增提交，无未跟踪文件变更
 
 ## 更新于 2026-07-26
 
