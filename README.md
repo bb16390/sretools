@@ -801,6 +801,8 @@ ruff format .
 | log_level | "DEBUG" | 日志级别 |
 | log_dir | master/log/uvicorn.log | 日志文件路径 |
 | secret_key | "your-secret-key-here" | 密钥 |
+| gateway_install_root | master/data/gateways/install | 网关安装根目录 |
+| gateway_backup_root | master/data/gateways/backup | 网关备份根目录 |
 
 ### Worker配置
 
@@ -811,9 +813,13 @@ ruff format .
 | host | "0.0.0.0" | 监听地址 |
 | port | 5501 | 监听端口 |
 | worker_id | "worker_{pid}" | Worker标识 |
-| central_servers | ["http://localhost:5500"] | 中心端服务器列表 |
+| central_servers | ["http://localhost:5500"] | 中心端服务器列表（兼容回退） |
 | central_timeout | 10 | 中心端超时时间（秒） |
 | central_retry_times | 3 | 重试次数 |
+| grpc_enabled | False | 是否启用 gRPC 通信 |
+| grpc_server_address | "localhost:50051" | gRPC 服务器地址（host:port） |
+| grpc_server_addresses | ["localhost:50051"] | gRPC 故障转移候选地址列表 |
+| grpc_only | False | 是否只使用 gRPC（禁用 HTTP 回退） |
 | log_collect_interval | 5 | 日志收集间隔（秒） |
 | log_batch_size | 1000 | 日志批量大小 |
 | log_queue_size | 10000 | 日志队列大小 |
@@ -1216,6 +1222,14 @@ python -m pytest tests/ --cov=master --cov=worker
 如有问题或建议，请提交Issue或Pull Request。
 
 ---
+
+## 更新于 2026-07-31
+
+- 验证 README.md 文档与实际代码一致性，确认所有模块、类、接口描述准确无误
+- 抽检 master/core、master/gateway/controllers、master/gateway/core、master/grpc、master/index、worker/adapter、worker/scheduler/tasks、worker/transformer/scripts、tests 目录，文档结构与实际文件一致
+- 更新 Master 配置表：补充 `gateway_install_root`、`gateway_backup_root` 两项网关安装/备份根目录配置
+- 更新 Worker 配置表：补充 `grpc_enabled`、`grpc_server_address`、`grpc_server_addresses`、`grpc_only` 四项 gRPC 通信相关配置，并更新 `central_servers` 说明为“兼容回退”
+- 确认自上次提交（7e84b88, 2026-07-30）以来工作树无新增提交，无未跟踪文件变更
 
 ## 更新于 2026-07-30
 
