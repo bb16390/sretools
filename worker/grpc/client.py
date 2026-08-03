@@ -5,15 +5,11 @@ gRPC Client implementation for Worker - Master Communication.
 import time
 import grpc
 import threading
-import sys
 import os
 import json
 import logging
 from typing import Dict, Any, List, Optional, Callable
 from urllib.parse import urlparse
-
-# Add the current directory to path for gRPC modules
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 try:
     from worker.core.settings import settings
@@ -34,8 +30,8 @@ except ImportError:
     def generate_signature(data):
         return "dummy-signature"
 
-import worker_pb2
-import worker_pb2_grpc
+from . import worker_pb2
+from . import worker_pb2_grpc
 
 logger = logging.getLogger(__name__)
 
