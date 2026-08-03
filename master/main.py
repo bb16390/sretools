@@ -1,31 +1,91 @@
-from contextlib import asynccontextmanager
-import threading
+"""Master 入口。
 
-from fastapi import FastAPI as FastAPIBase
-from fastapi import applications, File, UploadFile, Form
-from fastapi.openapi.docs import (
-    get_swagger_ui_html,
-)
-from fastapi.staticfiles import StaticFiles
-from sqlmodel import SQLModel
-from starlette.middleware.cors import CORSMiddleware
-from starlette.responses import RedirectResponse
+无论是从项目根目录运行（如 ``python -m master.main``），
+还是直接进入 ``master/`` 目录运行（如 ``python main.py``），
+本文件都会把 **项目根目录** 正确加入 ``sys.path``，
+避免 ``master/grpc`` 子包名与第三方 ``grpcio`` 库发生名称冲突。
+"""
 
-from index.admin import NavPageAdmin
-from index.file_upload_admin import FileUploadApp
-from core.globals import auth, site
-import logging
 import os
 import sys
+import logging
+import threading
+from contextlib import asynccontextmanager
 from logging import FileHandler
-from core.logging import AsyncFileHandler
-from core.settings import settings
-from fastapi_amis_admin.crud.schema import BaseApiOut
+
+# ---------------------------------------------------------------------------
+# 1. 确定项目根目录，并清理 / 重置 sys.path，避免 ``master/grpc`` 与
+#    第三方 ``grpcio`` 发生包名冲突
+# ---------------------------------------------------------------------------
+def _detect_project_root() -> str:
+    """向上探测包含 ``pyproject.toml`` 的目录作为项目根。"""
+    start = globals().get("__file__") or os.getcwd()
+    start = os.path.abspath(start)
+    if os.path.isfile(start):
+        cur = os.path.dirname(start)
+    else:
+        cur = start
+    for _ in range(5):
+        if os.path.isfile(os.path.join(cur, "pyproject.toml")):
+            return cur
+        parent = os.path.dirname(cur)
+        if parent == cur:
+            break
+        cur = parent
+    if os.path.basename(os.getcwd()) == "master":
+        return os.path.dirname(os.getcwd())
+    return os.getcwd()
+
+
+PROJECT_ROOT = _detect_project_root()
+_MASTER_DIR = os.path.join(PROJECT_ROOT, "master")
+
+
+def _normalize(p: str) -> str:
+    try:
+        return os.path.normcase(os.path.realpath(p))
+    except OSError:
+        return p
+
+
+_MASTER_DIR_NORM = _normalize(_MASTER_DIR)
+sys.path[:] = [
+    p for p in sys.path
+    if p and _normalize(p) not in (_MASTER_DIR_NORM, _normalize(""))
+]
+
+if _normalize(PROJECT_ROOT) not in {_normalize(p) for p in sys.path}:
+    sys.path.insert(0, PROJECT_ROOT)
+
+try:
+    os.chdir(PROJECT_ROOT)
+except OSError:
+    pass
+
+# ---------------------------------------------------------------------------
+# 2. 导入内部模块（必须放在 sys.path 调整之后）
+# ---------------------------------------------------------------------------
+from fastapi import FastAPI as FastAPIBase  # noqa: E402
+from fastapi import applications, File, UploadFile, Form  # noqa: E402
+from fastapi.openapi.docs import (  # noqa: E402
+    get_swagger_ui_html,
+)
+from fastapi.staticfiles import StaticFiles  # noqa: E402
+from sqlmodel import SQLModel  # noqa: E402
+from starlette.middleware.cors import CORSMiddleware  # noqa: E402
+from starlette.responses import RedirectResponse  # noqa: E402
+
+from master.index.admin import NavPageAdmin  # noqa: E402
+from master.index.file_upload_admin import FileUploadApp  # noqa: E402
+from master.core.globals import auth, site  # noqa: E402
+from master.core.logging import AsyncFileHandler  # noqa: E402
+from master.core.settings import settings  # noqa: E402
+from fastapi_amis_admin.crud.schema import BaseApiOut  # noqa: E402
 
 # 网关控制
 try:
-    from gateway.admin import GatewayAdminApp
-    from gateway.api import router as gateway_router
+    from master.gateway.admin import GatewayAdminApp  # noqa: E402
+    from master.gateway.api import router as gateway_router  # noqa: E402
     GATEWAY_AVAILABLE = True
 except Exception as exc:  # noqa: BLE001
     GATEWAY_AVAILABLE = False
@@ -34,17 +94,16 @@ except Exception as exc:  # noqa: BLE001
     import logging as _gw_log
     _gw_log.getLogger(__name__).warning("gateway module not available: %s", exc)
 
-# 添加 gRPC 相关导入
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "grpc"))
+# 添加 gRPC 相关导入（使用绝对包导入，避免遮蔽第三方 grpcio）
 try:
-    from server import start_grpc_server
+    from master.grpc.server import start_grpc_server  # noqa: E402
     GRPC_AVAILABLE = True
 except ImportError:
     GRPC_AVAILABLE = False
 
 # MCP Server（阶段一 POC）
 try:
-    from mcp_server import mcp_http_app
+    from master.mcp_server import mcp_http_app  # noqa: E402
     MCP_AVAILABLE = True
 except ImportError:
     MCP_AVAILABLE = False

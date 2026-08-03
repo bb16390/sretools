@@ -9,21 +9,15 @@ import threading
 from concurrent import futures
 from typing import Dict, Any, List
 
-import sys
-import os
-
-# Add the current directory to path for gRPC modules
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-
 try:
-    from core.settings import settings
-    from core.security import verify_signature, SECRET_KEY
+    from master.core.settings import settings
+    from master.core.security import verify_signature, SECRET_KEY
 except ImportError:
     # Fallback if not running in the full project context
     SECRET_KEY = "test-secret-key"
 
-import worker_pb2
-import worker_pb2_grpc
+from . import worker_pb2
+from . import worker_pb2_grpc
 
 
 # In-memory storage (shared with HTTP API if needed)
