@@ -42,6 +42,15 @@ try:
 except ImportError:
     GRPC_AVAILABLE = False
 
+# MCP Server（阶段一 POC）
+try:
+    from mcp_server import mcp_http_app
+    MCP_AVAILABLE = True
+except ImportError:
+    MCP_AVAILABLE = False
+    import logging as _mcp_log
+    _mcp_log.getLogger(__name__).warning("mcp module not available, skipping MCP server mount")
+
 # 配置日志系统
 log_dir = os.path.dirname(settings.log_dir)
 if not os.path.exists(log_dir):
@@ -145,6 +154,14 @@ site.mount_app(app)
 # 挂载网关 HTTP API
 if GATEWAY_AVAILABLE and gateway_router is not None:
     app.include_router(gateway_router)
+
+# 挂载 MCP Server（Streamable HTTP 传输）
+# 客户端端点: http://<host>:<port>/mcp/mcp
+if MCP_AVAILABLE:
+    app.mount("/mcp", mcp_http_app())
+    app_logger.info("MCP Server 已挂载至 /mcp/mcp")
+else:
+    app_logger.info("MCP Server 模块不可用，跳过挂载")
 
 
 # 文件上传API
