@@ -797,6 +797,12 @@ ruff format .
 | version | "0.0.0" | 版本号 |
 | site_title | "SRE Tools" | 站点标题 |
 | site_path | "/admin" | 管理路径 |
+| site_icon | "/static/favicon_b3b0647.png" | 站点图标 |
+| amis_cdn | "/static" | Amis 资源 CDN/本地静态路径（使用本地静态托管，避免外网 CDN 不可达导致管理后台白屏） |
+| amis_pkg | "amis" | Amis 资源包名 |
+| amis_theme | "cxd" | Amis 主题 |
+| static_dir | master/static | 静态文件目录（挂载至 /static） |
+| template_name | master/templates | 页面模板目录 |
 | database_url_async | SQLite | 异步数据库URL |
 | log_level | "DEBUG" | 日志级别 |
 | log_dir | master/log/uvicorn.log | 日志文件路径 |
@@ -1222,6 +1228,13 @@ python -m pytest tests/ --cov=master --cov=worker
 如有问题或建议，请提交Issue或Pull Request。
 
 ---
+
+## 更新于 2026-08-03
+
+- 新增提交 91844c0（2026-08-03，合并 PR #21）：修复管理后台静态资源路径导致白屏问题
+- 变更分析：将 Amis 前端资源改为本地静态托管，`amis_cdn` 指向 `/static`（由 `master/static` 目录挂载），避免外网 CDN 不可达时后台页面 SDK 加载失败白屏；`site_icon`、Swagger 资源同步改用本地 `/static` 路径
+- 更新「Master 配置」表：补充 `site_icon`、`amis_cdn`、`amis_pkg`、`amis_theme`、`static_dir`、`template_name` 六项静态资源/Amis 相关配置
+- 验证 README.md 文档与实际代码一致性，确认 master/core/settings.py、master/main.py、master/templates/app.html 与文档描述一致
 
 ## 更新于 2026-08-02
 
