@@ -19,9 +19,7 @@ auth = Auth(db=async_db, token_store=DbTokenStore(db=async_db,expire_seconds=60 
 # 然后导入MyAuthAdminSite
 from master.core.auth import MyAuthAdminSite
 
-site = MyAuthAdminSite(settings, engine=async_db)
-auth = Auth(db=async_db, token_store=DbTokenStore(db=async_db,expire_seconds=60 * 60 * 24 * 3600))
-site.auth = auth
+site = MyAuthAdminSite(settings, engine=async_db, auth=auth)
 
 
 # 创建定时任务调度器`SchedulerAdmin`实例

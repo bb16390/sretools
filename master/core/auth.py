@@ -1,8 +1,7 @@
 import os
 
-from fastapi_amis_admin.admin import AdminSite
 from fastapi_amis_admin.amis.components import App, Page
-from fastapi_user_auth.auth import Auth
+from fastapi_user_auth.admin import AuthAdminSite
 
 from master.core.settings import settings
 
@@ -16,8 +15,9 @@ App.__default_template_path__ = os.path.join(_templates_dir, "app.html")
 Page.__default_template_path__ = os.path.join(_templates_dir, "page.html")
 
 
-class MyAuthAdminSite(AdminSite):
+class MyAuthAdminSite(AuthAdminSite):
     """
-    自定义的AuthAdminSite
+    自定义的AuthAdminSite，继承自 fastapi_user_auth 的 AuthAdminSite，
+    自动注册 UserAuthApp（含登录、注册、用户管理、角色权限等）。
     """
     pass
