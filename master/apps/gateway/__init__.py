@@ -7,3 +7,15 @@
 - 可扩展：新增交易所只需在 controllers/ 目录下新增一个文件，并通过
   `@registry.register(exchange, kind)` 装饰器注册，无需修改 core / api / admin。
 """
+
+
+from fastapi import FastAPI
+
+
+def setup(app: FastAPI):
+    # 1. 导入管理应用
+    # 3. 注册普通路由
+    # 2. 导入定时任务
+    from . import admin, apis, jobs
+
+    app.include_router(apis.router)

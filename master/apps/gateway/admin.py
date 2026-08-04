@@ -8,36 +8,30 @@
 """
 from __future__ import annotations
 
-import logging
 from typing import Any
 
 from fastapi_amis_admin import admin, amis
-from fastapi_amis_admin.admin import AdminApp
 from fastapi_amis_admin.amis import Page, PageSchema
-from fastapi_amis_admin.amis.components import (
-    ActionType,
-    Column,
-    Form,
-    Grid,
-    InputNumber,
-    InputText,
-    Select,
-    Service,
-    TableColumn,
-)
-from fastapi_amis_admin.crud.schema import BaseApiOut
+from fastapi_amis_admin.amis.components import ActionType
 
-from ..controllers import registry
-from ..core.models import GatewayInstance
 from ..core.store import get_default_store
 
-log = logging.getLogger(__name__)
+from core.globals import site
 
+@site.register_admin
+class GatewayAdminApp(admin.AdminApp):
+    """网关分组应用。在 master/main.py 中使用 site.register_admin(GatewayAdminApp) 注册。"""
+
+    page_schema = PageSchema(label="网关控制", icon="fa fa-network-wired")
+
+    def __init__(self, app: "AdminApp") -> None:
+        super().__init__(app)
+        self.register_admin(GatewayInstanceAdmin)
+        self.register_admin(GatewayOpsAdmin)
 
 class GatewayInstanceAdmin(admin.PageAdmin):
     """网关实例管理：列表 + 创建/删除/状态查询/启停"""
-
-    page_schema = PageSchema(label="网关实例管理", icon="fa fa-server")
+    page_schema = PageSchema(label="实例管理", icon="fa fa-server")
 
     async def get_page(self, request) -> Page:  # type: ignore[override]
         store = get_default_store()
@@ -239,12 +233,4 @@ class GatewayOpsAdmin(admin.PageAdmin):
         )
 
 
-class GatewayAdminApp(AdminApp):
-    """网关分组应用。在 master/main.py 中使用 site.register_admin(GatewayAdminApp) 注册。"""
 
-    page_schema = PageSchema(label="网关控制", icon="fa fa-network-wired")
-
-    def __init__(self, app: "AdminApp") -> None:
-        super().__init__(app)
-        self.register_admin(GatewayInstanceAdmin)
-        self.register_admin(GatewayOpsAdmin)
