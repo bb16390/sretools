@@ -4,7 +4,7 @@ from fastapi_amis_admin.admin import AdminSite
 from fastapi_amis_admin.amis.components import App, Page
 from fastapi_user_auth.auth import Auth
 
-from core.settings import settings
+from master.core.settings import settings
 
 # fastapi_amis_admin 默认模板引用的是 npm CDN 风格的带版本号路径
 # (vue@2.7.14/dist/vue.min.js、history@5.3.0/umd/history.production.min.js)，

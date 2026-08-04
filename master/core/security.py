@@ -3,7 +3,7 @@ import hashlib
 import time
 from typing import Dict, Any
 
-from core.settings import settings
+from master.core.settings import settings
 
 # 密钥配置
 SECRET_KEY = settings.secret_key

@@ -21,9 +21,9 @@ from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
-from gateway.controllers import registry
-from gateway.core.errors import GatewayError
-from gateway.core.store import get_default_store
+from master.gateway.controllers import registry
+from master.gateway.core.errors import GatewayError
+from master.gateway.core.store import get_default_store
 
 log = logging.getLogger(__name__)
 
