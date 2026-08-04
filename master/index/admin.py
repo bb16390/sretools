@@ -10,8 +10,8 @@ from fastapi_amis_admin.crud.base import SchemaCreateT
 from sqlalchemy.engine import Result
 from starlette.requests import Request
 
-from index.models import NavPage, NavPageType
-from index.utils import AmisPageManager, include_children
+from master.index.models import NavPage, NavPageType
+from master.index.utils import AmisPageManager, include_children
 
 
 class NavPageAdmin(admin.ModelAdmin):

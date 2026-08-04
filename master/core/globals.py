@@ -1,5 +1,5 @@
 from sqlalchemy_database import AsyncDatabase
-from core.settings import settings
+from master.core.settings import settings
 
 # 导入Auth相关模块
 from fastapi_user_auth.auth import Auth
@@ -17,7 +17,7 @@ async_db = AsyncDatabase.create(
 auth = Auth(db=async_db, token_store=DbTokenStore(db=async_db,expire_seconds=60 * 60 * 24 * 3600))
 
 # 然后导入MyAuthAdminSite
-from core.auth import MyAuthAdminSite
+from master.core.auth import MyAuthAdminSite
 
 site = MyAuthAdminSite(settings, engine=async_db)
 auth = Auth(db=async_db, token_store=DbTokenStore(db=async_db,expire_seconds=60 * 60 * 24 * 3600))

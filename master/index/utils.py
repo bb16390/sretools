@@ -5,7 +5,7 @@ from fastapi_amis_admin.admin.admin import AdminGroup, PageSchemaAdmin
 from sqlalchemy.future import select
 from sqlalchemy.orm import Session
 
-from index.models import NavPage
+from master.index.models import NavPage
 
 
 class AmisPageManager:
