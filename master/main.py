@@ -1,8 +1,8 @@
 """Master 入口。
 
-无论是从项目根目录运行（如 ``python -m master.main``），
-还是直接进入 ``master/`` 目录运行（如 ``python main.py``），
-本文件都会把 **项目根目录** 正确加入 ``sys.path``，
+无论是从项目根目录运行（如 ``python -m master.main``),
+还是直接进入 ``master/`` 目录运行（如 ``python main.py``),
+本文件都会把 **项目根目录** 正确加入 ``sys.path``,
 避免 ``master/grpc`` 子包名与第三方 ``grpcio`` 库发生名称冲突。
 """
 
@@ -11,7 +11,6 @@ import sys
 import logging
 import threading
 from contextlib import asynccontextmanager
-from logging import FileHandler
 
 # ---------------------------------------------------------------------------
 # 1. 确定项目根目录，并清理 / 重置 sys.path，避免 ``master/grpc`` 与
@@ -78,61 +77,15 @@ from starlette.responses import RedirectResponse  # noqa: E402
 from master.index.admin import NavPageAdmin  # noqa: E402
 from master.index.file_upload_admin import FileUploadApp  # noqa: E402
 from master.core.globals import auth, site  # noqa: E402
-from master.core.logging import AsyncFileHandler  # noqa: E402
+from master.core.logging import AsyncFileHandler, setup_logging  # noqa: E402
 from master.core.settings import settings  # noqa: E402
 from fastapi_amis_admin.crud.schema import BaseApiOut  # noqa: E402
 
-# 网关控制
-try:
-    from master.gateway.admin import GatewayAdminApp  # noqa: E402
-    from master.gateway.api import router as gateway_router  # noqa: E402
-    GATEWAY_AVAILABLE = True
-except Exception as exc:  # noqa: BLE001
-    GATEWAY_AVAILABLE = False
-    gateway_router = None  # type: ignore[assignment]
-    GatewayAdminApp = None  # type: ignore[assignment,misc]
-    import logging as _gw_log
-    _gw_log.getLogger(__name__).warning("gateway module not available: %s", exc)
-
-# 添加 gRPC 相关导入（使用绝对包导入，避免遮蔽第三方 grpcio）
-try:
-    from master.grpc.server import start_grpc_server  # noqa: E402
-    GRPC_AVAILABLE = True
-except ImportError:
-    GRPC_AVAILABLE = False
-
-# MCP Server（阶段一 POC）
-try:
-    from master.mcp_server import mcp_http_app  # noqa: E402
-    MCP_AVAILABLE = True
-except ImportError:
-    MCP_AVAILABLE = False
-    import logging as _mcp_log
-    _mcp_log.getLogger(__name__).warning("mcp module not available, skipping MCP server mount")
-
 # 配置日志系统
-log_dir = os.path.dirname(settings.log_dir)
-if not os.path.exists(log_dir):
-    os.makedirs(log_dir, exist_ok=True)
+setup_logging(settings)
 
-# 创建 FileHandler
-file_handler = FileHandler(settings.log_dir, encoding='utf-8')
-file_handler.setLevel(getattr(logging, settings.log_level))
-
-# 创建 AsyncFileHandler
-async_file_handler = AsyncFileHandler(file_handler)
-
-# 配置日志格式
-formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-file_handler.setFormatter(formatter)
-
-# 添加处理器到根日志器
-root_logger = logging.getLogger()
-root_logger.setLevel(getattr(logging, settings.log_level))
-root_logger.addHandler(async_file_handler)
-
-# 创建应用专用日志器
-app_logger = logging.getLogger(__name__)
+# 日志logger
+logger = logging.getLogger(__name__)
 
 
 class FastAPI(FastAPIBase):
@@ -168,24 +121,25 @@ async def lifespan(app: FastAPI):
         await auth.enforcer.add_policy(
             "u:admin", site.unique_id, "page", "page", "allow"
         )
-        app_logger.info("管理员权限策略添加完成")
+        logger.info("管理员权限策略添加完成")
     
-    if GRPC_AVAILABLE:
-        try:
-            grpc_thread = threading.Thread(
-                target=lambda: start_grpc_server(port=50051, daemon=True),
-                daemon=True
-            )
-            grpc_thread.start()
-            app_logger.info("gRPC 服务已启动，端口: 50051")
-        except Exception as e:
-            app_logger.error(f"启动 gRPC 服务失败: {e}")
-    else:
-        app_logger.info("gRPC 服务模块不可用，跳过启动")
+    # 添加 gRPC 相关导入（使用绝对包导入，避免遮蔽第三方 grpcio）
+    try:
+        from master.grpc.server import start_grpc_server
+        grpc_thread = threading.Thread(
+            target=lambda: start_grpc_server(port=50051, daemon=True),
+            daemon=True
+        )
+        grpc_thread.start()
+        logger.info("gRPC 服务已启动，端口: 50051")
+    except ImportError:
+        logger.info("gRPC 服务模块不可用，跳过启动")
+    except Exception as e:
+            logger.error(f"启动 gRPC 服务失败: {e}")
     
-    app_logger.info("应用启动完成")
+    logger.info("应用启动完成")
     yield
-    app_logger.info("优雅停机")
+    logger.info("优雅停机")
 
 
 # 创建FastAPI实例
@@ -203,24 +157,24 @@ app = FastAPI(
 app.mount("/static", StaticFiles(directory=settings.static_dir), name="static")
 
 site.register_admin(NavPageAdmin)
-if GATEWAY_AVAILABLE:
-    site.register_admin(GatewayAdminApp)
+
 site.register_admin(FileUploadApp)
 
 # 挂载后台管理系统
 site.mount_app(app)
 
 # 挂载网关 HTTP API
-if GATEWAY_AVAILABLE and gateway_router is not None:
-    app.include_router(gateway_router)
+# if GATEWAY_AVAILABLE and gateway_router is not None:
+#     app.include_router(gateway_router)
 
 # 挂载 MCP Server（Streamable HTTP 传输）
 # 客户端端点: http://<host>:<port>/mcp/mcp
-if MCP_AVAILABLE:
+try:
+    from master.apps.mcp_server import mcp_http_app
     app.mount("/mcp", mcp_http_app())
-    app_logger.info("MCP Server 已挂载至 /mcp/mcp")
-else:
-    app_logger.info("MCP Server 模块不可用，跳过挂载")
+    logger.info("MCP Server 已挂载至 /mcp/mcp")
+except ImportError:
+    logger.info("MCP Server 模块不可用，跳过挂载") 
 
 
 # 文件上传API

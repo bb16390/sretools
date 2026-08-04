@@ -1,3 +1,5 @@
+import os
+import logging
 from logging import FileHandler, LogRecord, WARNING
 from logging.handlers import QueueHandler
 from queue import Queue, Empty
@@ -145,3 +147,30 @@ class AsyncFileHandler(QueueHandler):
         if elapsed == 0:
             return 0
         return self._processed_count / elapsed
+
+
+def setup_logging(settings) -> None:
+    # 配置日志系统
+    log_dir = os.path.dirname(settings.log_dir)
+    if not os.path.exists(log_dir):
+        os.makedirs(log_dir, exist_ok=True)
+
+    # 创建 FileHandler
+    file_handler = FileHandler(settings.log_dir, encoding='utf-8')
+    file_handler.setLevel(getattr(logging, settings.log_level))
+
+    # 创建 AsyncFileHandler
+    async_file_handler = AsyncFileHandler(file_handler)
+
+    # 配置日志格式
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    file_handler.setFormatter(formatter)
+
+    # 添加处理器到根日志器
+    root_logger = logging.getLogger()
+    # 去重：移除已有的 AsyncFileHandler，避免重复堆叠导致日志重复输出
+    for h in list(root_logger.handlers):
+        if isinstance(h, AsyncFileHandler):
+            root_logger.removeHandler(h)
+    root_logger.setLevel(getattr(logging, settings.log_level))
+    root_logger.addHandler(async_file_handler)

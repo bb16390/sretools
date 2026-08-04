@@ -1,0 +1,9 @@
+- [ ] `master/core/logging.py` 中存在 `setup_logging(settings)` 函数，且函数签名与 spec 一致
+- [ ] `setup_logging` 包含目录创建、`FileHandler` 创建、`AsyncFileHandler` 包装、formatter 配置、根 logger 注册全部逻辑
+- [ ] `setup_logging` 对根 logger handler 做了去重处理，避免重复调用堆叠 handler
+- [ ] 日志格式字符串保持为 `'%(asctime)s - %(name)s - %(levelname)s - %(message)s'`
+- [ ] `FileHandler` 编码保持为 `utf-8`
+- [ ] `master/main.py` 已删除第 94-113 行的内联日志初始化代码
+- [ ] `master/main.py` 在导入后正确调用 `setup_logging(settings)`
+- [ ] `master/main.py` 中仅服务于被删除代码的顶层导入已清理（如 `from logging import FileHandler`）
+- [ ] 程序可正常启动，日志按 `settings.log_dir` 写入，根 logger 仅含一个 `async_file_handler`
