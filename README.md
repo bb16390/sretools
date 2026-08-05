@@ -1268,6 +1268,19 @@ python -m pytest tests/ --cov=master --cov=worker
 
 ---
 
+## 更新于 2026-08-05
+
+- 今日无代码变更，项目运行正常
+- 验证 README.md 文档与实际代码一致性，确认所有模块、类、接口描述准确无误
+- 抽检 master/core、master/apps/gateway、master/apps/mcp_server、master/grpc、master/index、worker/adapter、worker/scheduler、worker/transformer、tests 目录，文档结构与实际文件一致
+- 确认自上次提交（995e9a1, 2026-08-04）以来工作树无新增提交，无未跟踪文件变更
+
+## 更新于 2026-08-04
+
+- 新增提交 995e9a1（2026-08-04）：更新 README.md，同步网关模块迁移与 MCP Server 新增内容
+- 变更分析：目录结构 master/gateway → master/apps/gateway，新增 master/apps/mcp_server；网关模块 admin.py、api.py 从子包改为单文件；新增 MCP Server 模块说明、API 接口补充、数据模型路径修正、架构图更新
+- 验证文档与代码一致性，确认所有模块描述与实际代码匹配
+
 ## 更新于 2026-08-03
 
 - 新增提交 91844c0（2026-08-03，合并 PR #21）：修复管理后台静态资源路径导致白屏问题
