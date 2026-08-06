@@ -730,6 +730,7 @@ def update_db_pages_parent_and_sort(self, links: list[dict], parent_id: int = No
 | aiohttp | ≥3.9.0 | 异步HTTP客户端 |
 | sqlalchemy | ≥2.0.0 | ORM框架底层 |
 | croniter | ≥2.0.0 | Cron表达式解析 |
+| mcp | ≥1.9.0 | MCP（Model Context Protocol）服务端 |
 
 #### 开发依赖
 | 依赖包 | 版本 | 用途 |
@@ -1508,3 +1509,13 @@ python -m pytest tests/ --cov=master --cov=worker
 - 更新项目目录结构与核心模块说明文档
 - 新增网关相关数据模型说明与 API 接口文档
 - 更新版本历史至 v0.2.0
+
+---
+
+## 更新于 2026-08-06
+
+- 今日无新增 git 提交，项目运行正常
+- 验证 README.md 文档与实际代码一致性，确认所有模块、类、接口描述准确无误
+- 抽检 master/core、master/apps/gateway、master/apps/mcp_server、master/grpc、master/index、worker/core、worker/adapter、worker/scheduler、worker/transformer、tests 目录，文档结构与实际文件一致
+- 补充生产依赖列表中缺失的 `mcp>=1.9.0`（MCP Model Context Protocol 服务端），与 pyproject.toml 保持一致
+- 确认自上次提交（e6f750e, 2026-08-05）以来工作树无新增提交，无未跟踪文件变更
