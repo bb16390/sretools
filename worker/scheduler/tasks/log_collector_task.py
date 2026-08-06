@@ -14,17 +14,22 @@ logger = logging.getLogger(__name__)
 
 class LogCollectorTask(BaseTask):
 
-    def __init__(self, config: dict, task_id: str = None):
+    def __init__(
+        self,
+        task_type: str,
+        config: dict,
+        task_id: str = None,
+    ):
         super().__init__(
-            task_type="log_collector",
+            task_type=task_type,
             config=config,
             task_id=task_id,
         )
         self.log_queue = Queue(maxsize=settings.log_queue_size)
-        self.batch_size = settings.log_batch_size
+        self.batch_size = self.config.get("batch_size", settings.log_batch_size)
         self.local_storage_path = settings.local_storage_path
         self.max_local_storage_size = settings.max_local_storage_size
-        
+
         os.makedirs(self.local_storage_path, exist_ok=True)
 
     def _default_execution_mode(self) -> ExecutionMode:

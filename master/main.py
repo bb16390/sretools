@@ -174,7 +174,16 @@ try:
     app.mount("/mcp", mcp_http_app())
     logger.info("MCP Server 已挂载至 /mcp/mcp")
 except ImportError:
-    logger.info("MCP Server 模块不可用，跳过挂载") 
+    logger.info("MCP Server 模块不可用，跳过挂载")
+
+# 挂载数据采集模块（向 worker 下发定时数据采集 / 实时日志采集任务）
+try:
+    from master.apps.data_collection import setup as setup_data_collection
+    setup_data_collection(app)
+    logger.info("数据采集模块已挂载至 /api/data-collection")
+except ImportError:
+    logger.info("数据采集模块不可用，跳过挂载")
+
 
 
 # 文件上传API

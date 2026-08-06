@@ -483,7 +483,11 @@ class CentralGrpcClient:
                 def message_generator():
                     ping_seq = 1
                     while self._communicate_running and self._connected:
-                        ping = worker_pb2.Ping(sequence=ping_seq, timestamp=time.time())
+                        ping = worker_pb2.Ping(
+                            sequence=ping_seq,
+                            timestamp=time.time(),
+                            worker_id=settings.worker_id,
+                        )
                         yield worker_pb2.WorkerMessage(ping=ping)
                         ping_seq += 1
                         time.sleep(30)
@@ -507,11 +511,25 @@ class CentralGrpcClient:
                             except Exception as exc:
                                 logger.error("config_update handler failed: %s", exc)
                     elif master_msg.HasField("task_update"):
+                        # proto 的 TaskUpdate.config 是 map<string,string>，
+                        # master 端把完整的 worker_config 序列化为 JSON 放在
+                        # "config_json" key 下，这里反序列化为字典。
+                        raw_config = dict(master_msg.task_update.config)
+                        if "config_json" in raw_config:
+                            try:
+                                task_config = json.loads(raw_config["config_json"])
+                            except json.JSONDecodeError as exc:
+                                logger.error(
+                                    "task_update config_json decode failed: %s", exc
+                                )
+                                task_config = {}
+                        else:
+                            task_config = raw_config
                         task_update = {
                             "action": master_msg.task_update.action,
                             "task_id": master_msg.task_update.task_id,
                             "task_type": master_msg.task_update.task_type,
-                            "config": dict(master_msg.task_update.config),
+                            "config": task_config,
                         }
                         handler = self._message_handlers.get("task_update")
                         if handler is not None:
@@ -583,8 +601,13 @@ class CentralGrpcClient:
             return
         action = task.get("action")
         config = task.get("config", {})
+        task_id = task.get("task_id")
         if action == "task_create":
-            self._task_scheduler.create_task(task.get("task_type"), config)
+            # 若 master 指定了 task_id，传给 scheduler 以保持一致；
+            # 否则由 scheduler 自动生成。
+            self._task_scheduler.create_task(
+                task.get("task_type"), config, task_id=task_id or None
+            )
         elif action == "task_stop":
             self._task_scheduler.stop_task(task.get("task_id"))
         elif action == "task_pause":

@@ -81,6 +81,8 @@ from worker.scheduler.tasks import (  # noqa: E402
     MetricConverterTask,
     DatabaseCollectorTask,
     KafkaCollectorTask,
+    PrefectDatabaseCollectorTask,
+    HAS_PREFECT,
 )
 
 
@@ -155,6 +157,17 @@ class Worker:
             self.scheduler.register_task_type("metric_converter", MetricConverterTask)
             self.scheduler.register_task_type("database_collector", DatabaseCollectorTask)
             self.scheduler.register_task_type("kafka_collector", KafkaCollectorTask)
+            # 基于 prefect 的数据库采集任务（prefect 未安装时跳过）
+            if PrefectDatabaseCollectorTask is not None and HAS_PREFECT:
+                self.scheduler.register_task_type(
+                    "prefect_database_collector", PrefectDatabaseCollectorTask
+                )
+                self.logger.info("PrefectDatabaseCollectorTask registered (prefect available)")
+            else:
+                self.logger.warning(
+                    "prefect not installed; prefect_database_collector task type disabled, "
+                    "falling back to database_collector"
+                )
             self.logger.info("Task types registered with scheduler factory")
 
             # worker ID

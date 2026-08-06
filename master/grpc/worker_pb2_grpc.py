@@ -4,7 +4,6 @@ import grpc
 import warnings
 
 from . import worker_pb2 as worker__pb2
-
 GRPC_GENERATED_VERSION = '1.81.0'
 GRPC_VERSION = grpc.__version__
 _version_not_supported = False
@@ -80,6 +79,26 @@ class WorkerServiceStub:
                 request_serializer=worker__pb2.WorkerMessage.SerializeToString,
                 response_deserializer=worker__pb2.MasterMessage.FromString,
                 _registered_method=True)
+        self.DispatchScheduledTask = channel.unary_unary(
+                '/worker.WorkerService/DispatchScheduledTask',
+                request_serializer=worker__pb2.DispatchScheduledTaskRequest.SerializeToString,
+                response_deserializer=worker__pb2.DispatchTaskResponse.FromString,
+                _registered_method=True)
+        self.DispatchLogTask = channel.unary_unary(
+                '/worker.WorkerService/DispatchLogTask',
+                request_serializer=worker__pb2.DispatchLogTaskRequest.SerializeToString,
+                response_deserializer=worker__pb2.DispatchTaskResponse.FromString,
+                _registered_method=True)
+        self.ControlTask = channel.unary_unary(
+                '/worker.WorkerService/ControlTask',
+                request_serializer=worker__pb2.ControlTaskRequest.SerializeToString,
+                response_deserializer=worker__pb2.ControlTaskResponse.FromString,
+                _registered_method=True)
+        self.ListWorkerTasks = channel.unary_unary(
+                '/worker.WorkerService/ListWorkerTasks',
+                request_serializer=worker__pb2.ListWorkerTasksRequest.SerializeToString,
+                response_deserializer=worker__pb2.ListWorkerTasksResponse.FromString,
+                _registered_method=True)
 
 
 class WorkerServiceServicer:
@@ -149,6 +168,37 @@ class WorkerServiceServicer:
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def DispatchScheduledTask(self, request, context):
+        """---------------------------------------------------------------------
+        数据采集模块 RPC 接口（master 侧提供给外部调用方下发任务到 worker）
+        ---------------------------------------------------------------------
+        下发定时数据采集任务到指定 worker
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def DispatchLogTask(self, request, context):
+        """下发实时日志采集任务到指定 worker
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def ControlTask(self, request, context):
+        """控制任务（stop / pause / resume）
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def ListWorkerTasks(self, request, context):
+        """查询指定 worker 上的任务列表
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_WorkerServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -196,6 +246,26 @@ def add_WorkerServiceServicer_to_server(servicer, server):
                     servicer.Communicate,
                     request_deserializer=worker__pb2.WorkerMessage.FromString,
                     response_serializer=worker__pb2.MasterMessage.SerializeToString,
+            ),
+            'DispatchScheduledTask': grpc.unary_unary_rpc_method_handler(
+                    servicer.DispatchScheduledTask,
+                    request_deserializer=worker__pb2.DispatchScheduledTaskRequest.FromString,
+                    response_serializer=worker__pb2.DispatchTaskResponse.SerializeToString,
+            ),
+            'DispatchLogTask': grpc.unary_unary_rpc_method_handler(
+                    servicer.DispatchLogTask,
+                    request_deserializer=worker__pb2.DispatchLogTaskRequest.FromString,
+                    response_serializer=worker__pb2.DispatchTaskResponse.SerializeToString,
+            ),
+            'ControlTask': grpc.unary_unary_rpc_method_handler(
+                    servicer.ControlTask,
+                    request_deserializer=worker__pb2.ControlTaskRequest.FromString,
+                    response_serializer=worker__pb2.ControlTaskResponse.SerializeToString,
+            ),
+            'ListWorkerTasks': grpc.unary_unary_rpc_method_handler(
+                    servicer.ListWorkerTasks,
+                    request_deserializer=worker__pb2.ListWorkerTasksRequest.FromString,
+                    response_serializer=worker__pb2.ListWorkerTasksResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -442,6 +512,114 @@ class WorkerService:
             '/worker.WorkerService/Communicate',
             worker__pb2.WorkerMessage.SerializeToString,
             worker__pb2.MasterMessage.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def DispatchScheduledTask(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/worker.WorkerService/DispatchScheduledTask',
+            worker__pb2.DispatchScheduledTaskRequest.SerializeToString,
+            worker__pb2.DispatchTaskResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def DispatchLogTask(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/worker.WorkerService/DispatchLogTask',
+            worker__pb2.DispatchLogTaskRequest.SerializeToString,
+            worker__pb2.DispatchTaskResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ControlTask(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/worker.WorkerService/ControlTask',
+            worker__pb2.ControlTaskRequest.SerializeToString,
+            worker__pb2.ControlTaskResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ListWorkerTasks(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/worker.WorkerService/ListWorkerTasks',
+            worker__pb2.ListWorkerTasksRequest.SerializeToString,
+            worker__pb2.ListWorkerTasksResponse.FromString,
             options,
             channel_credentials,
             insecure,

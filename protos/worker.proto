@@ -30,6 +30,18 @@ service WorkerService {
   
   // Bidirectional streaming for real-time communication (replaces WebSocket)
   rpc Communicate(stream WorkerMessage) returns (stream MasterMessage);
+
+  // ---------------------------------------------------------------------
+  // 数据采集模块 RPC 接口（master 侧提供给外部调用方下发任务到 worker）
+  // ---------------------------------------------------------------------
+  // 下发定时数据采集任务到指定 worker
+  rpc DispatchScheduledTask(DispatchScheduledTaskRequest) returns (DispatchTaskResponse);
+  // 下发实时日志采集任务到指定 worker
+  rpc DispatchLogTask(DispatchLogTaskRequest) returns (DispatchTaskResponse);
+  // 控制任务（stop / pause / resume）
+  rpc ControlTask(ControlTaskRequest) returns (ControlTaskResponse);
+  // 查询指定 worker 上的任务列表
+  rpc ListWorkerTasks(ListWorkerTasksRequest) returns (ListWorkerTasksResponse);
 }
 
 // Worker info message
@@ -172,6 +184,7 @@ message TaskStatus {
 message Ping {
   int32 sequence = 1;
   double timestamp = 2;
+  string worker_id = 3;  // 用于在 Communicate 流中标识 worker 身份
 }
 
 // Configuration update
@@ -240,4 +253,104 @@ message GetKafkaOffsetsResponse {
   bool success = 1;
   repeated KafkaTopicOffsets topics = 2;
   double timestamp = 3;
+}
+
+// =====================================================================
+// 数据采集模块消息定义
+// =====================================================================
+
+// 定时数据采集任务配置（与 worker 端 DatabaseCollectorTask / PrefectDatabaseCollectorTask
+// 的 config 字段对齐）
+message ScheduledTaskConfig {
+  string cron_expression = 1;            // cron 调度表达式
+  string adapter_type = 2;               // sql / clickhouse / influxdb / http / redis / kafka
+  string adapter_config_json = 3;        // adapter 构造参数（JSON 字符串）
+  string query = 4;                      // 单条 SQL（与 queries 二选一）
+  repeated string queries = 5;           // 多条 SQL
+  bool trade_day_only = 6;               // 仅在交易日执行
+  string execution_mode = 7;             // thread / process
+  string task_kind = 8;                  // database_collector / prefect_database_collector
+  map<string, string> extra = 9;         // 预留扩展字段
+}
+
+// 实时日志采集任务配置
+message LogTaskConfig {
+  string source_type = 1;                // file / syslog / tcp / udp
+  string source_config_json = 2;         // 源配置（JSON 字符串，如文件路径）
+  int32 collect_interval = 3;            // 采集间隔（秒）
+  int32 batch_size = 4;                  // 批次大小
+  int32 report_interval = 5;             // 状态上报间隔（秒）
+  map<string, string> extra = 6;         // 预留扩展字段
+}
+
+// 下发定时数据采集任务请求
+message DispatchScheduledTaskRequest {
+  string worker_id = 1;                  // 目标 worker
+  string task_id = 2;                    // 任务 ID（为空则由 worker 生成）
+  ScheduledTaskConfig config = 3;        // 任务配置
+  string signature = 4;                  // 请求签名
+  double timestamp = 5;
+}
+
+// 下发实时日志采集任务请求
+message DispatchLogTaskRequest {
+  string worker_id = 1;                  // 目标 worker
+  string task_id = 2;                    // 任务 ID（为空则由 worker 生成）
+  LogTaskConfig config = 3;              // 任务配置
+  string signature = 4;                  // 请求签名
+  double timestamp = 5;
+}
+
+// 任务下发响应（同时适用于定时 / 日志任务）
+message DispatchTaskResponse {
+  bool success = 1;
+  string message = 2;
+  string worker_id = 3;
+  string task_id = 4;
+  // worker 是否已在线（false 表示任务被暂存，等 worker 上线后下发）
+  bool worker_online = 5;
+  double timestamp = 6;
+}
+
+// 任务控制请求（stop / pause / resume）
+message ControlTaskRequest {
+  string worker_id = 1;
+  string task_id = 2;
+  // 控制动作: task_stop / task_pause / task_resume
+  string action = 3;
+  string signature = 4;
+  double timestamp = 5;
+}
+
+// 任务控制响应
+message ControlTaskResponse {
+  bool success = 1;
+  string message = 2;
+  string worker_id = 3;
+  string task_id = 4;
+  bool worker_online = 5;
+  double timestamp = 6;
+}
+
+// 查询 worker 任务列表请求
+message ListWorkerTasksRequest {
+  string worker_id = 1;
+}
+
+// 单个任务摘要
+message TaskSummary {
+  string task_id = 1;
+  string task_type = 2;
+  string status = 3;
+  string execution_mode = 4;
+  string config_json = 5;
+  double last_updated = 6;
+}
+
+// 查询 worker 任务列表响应
+message ListWorkerTasksResponse {
+  bool success = 1;
+  string message = 2;
+  repeated TaskSummary tasks = 3;
+  double timestamp = 4;
 }

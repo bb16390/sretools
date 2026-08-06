@@ -41,7 +41,9 @@ class TaskScheduler:
         self._task_factory[task_type] = task_cls
         logger.info(f"Registered task type: {task_type} -> {task_cls.__name__}")
 
-    def create_task(self, task_type: str, config: Dict[str, Any]) -> Optional[str]:
+    def create_task(
+        self, task_type: str, config: Dict[str, Any], task_id: Optional[str] = None
+    ) -> Optional[str]:
         """创建并启动一个任务，返回 task_id"""
         if task_type not in self._task_factory:
             logger.error(f"Unknown task type: {task_type}")
@@ -54,15 +56,29 @@ class TaskScheduler:
             temp_instance = task_cls(task_type=task_type, config=config)
             config["execution_mode"] = temp_instance._default_execution_mode().value
 
-        # 为 DatabaseCollectorTask 传递 trade_day_cache
+        # 为 DatabaseCollectorTask / PrefectDatabaseCollectorTask 传递 trade_day_cache
         # 为 KafkaCollectorTask 传递 grpc_client
-        from worker.scheduler.tasks import DatabaseCollectorTask, KafkaCollectorTask
-        if task_cls is DatabaseCollectorTask and self._trade_day_cache is not None:
-            task = task_cls(task_type=task_type, config=config, trade_day_cache=self._trade_day_cache)
+        from worker.scheduler.tasks import (
+            DatabaseCollectorTask,
+            KafkaCollectorTask,
+            PrefectDatabaseCollectorTask,
+        )
+        if (
+            task_cls in (DatabaseCollectorTask, PrefectDatabaseCollectorTask)
+            and self._trade_day_cache is not None
+        ):
+            task = task_cls(
+                task_type=task_type,
+                config=config,
+                task_id=task_id,
+                trade_day_cache=self._trade_day_cache,
+            )
         elif task_cls is KafkaCollectorTask and self._grpc_client is not None:
-            task = task_cls(task_type=task_type, config=config, grpc_client=self._grpc_client)
+            task = task_cls(
+                task_type=task_type, config=config, task_id=task_id, grpc_client=self._grpc_client
+            )
         else:
-            task = task_cls(task_type=task_type, config=config)
+            task = task_cls(task_type=task_type, config=config, task_id=task_id)
         task.set_status_callback(self._on_task_status)
 
         with self._lock:
