@@ -1519,3 +1519,11 @@ python -m pytest tests/ --cov=master --cov=worker
 - 抽检 master/core、master/apps/gateway、master/apps/mcp_server、master/grpc、master/index、worker/core、worker/adapter、worker/scheduler、worker/transformer、tests 目录，文档结构与实际文件一致
 - 补充生产依赖列表中缺失的 `mcp>=1.9.0`（MCP Model Context Protocol 服务端），与 pyproject.toml 保持一致
 - 确认自上次提交（e6f750e, 2026-08-05）以来工作树无新增提交，无未跟踪文件变更
+
+## 更新于 2026-08-07
+
+- 今日无新增 git 提交，项目运行正常
+- 验证 README.md 文档与实际代码一致性，确认所有模块、类、接口描述准确无误
+- 抽检 master/core、master/apps/gateway、master/apps/mcp_server、master/grpc、worker/adapter、worker/scheduler/tasks、worker/transformer/scripts、tests 目录，文档结构与实际文件一致
+- 验证 pyproject.toml 生产依赖与 README.md 依赖列表完全匹配（fastapi 0.111.0、sqlmodel 0.0.19、sqlmodelx 0.0.12、mcp>=1.9.0、confluent-kafka>=2.3.0 等所有版本号一致）
+- 确认自上次提交（f3de3b5, 2026-08-06）以来工作树无新增提交，无未跟踪文件变更
