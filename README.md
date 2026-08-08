@@ -1269,6 +1269,13 @@ python -m pytest tests/ --cov=master --cov=worker
 
 ---
 
+## 更新于 2026-08-08
+
+- 今日无代码变更，项目运行正常
+- 验证 README.md 文档与实际代码一致性，确认所有模块、类、接口描述准确无误
+- 抽检 master/core、master/apps/gateway、master/apps/mcp_server、master/grpc、master/index、worker/adapter、worker/scheduler、worker/transformer、tests 目录，文档结构与实际文件一致
+- 确认自上次提交（eccd581, 2026-08-07）以来工作树无新增提交，未跟踪文件 `.trae-html-share-packages/` 为模板分享产物，未纳入版本控制
+
 ## 更新于 2026-08-05
 
 - 今日无代码变更，项目运行正常
