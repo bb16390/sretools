@@ -452,25 +452,39 @@
 - **职责**: 管理 Worker 端所有采集/转换任务的生命周期
 - **关键功能**:
   - 任务类型工厂注册
-  - 任务创建、启动、停止
-  - 任务状态监控
-  - 进程存活监控
-  - 支持多种执行模式（周期执行、持续运行）
+  - 任务创建、启动、停止、暂停、恢复
+  - 任务状态监控与上报
+  - 进程存活监控（5秒间隔检查）
+  - 支持多种执行模式（线程/进程执行）
+  - 任务状态回调与 Master 端同步
 
 ##### BaseTask 任务基类
 - **文件**: [worker/scheduler/base_task.py](file:///workspace/worker/scheduler/base_task.py)
 - **职责**: 定义所有任务的统一接口和生命周期
 - **执行模式**:
-  - `PERIODIC`: 周期性执行
-  - `CONTINUOUS`: 持续运行
+  - `THREAD`: 线程执行（默认）
+  - `PROCESS`: 进程执行
+- **任务状态**: IDLE、RUNNING、PAUSED、STOPPED、FAILED
+- **关键方法**:
+  - `start()`: 启动任务
+  - `stop()`: 停止任务（支持优雅关闭和强制终止）
+  - `pause()`: 暂停任务
+  - `resume()`: 恢复任务
+  - `is_alive()`: 检查任务执行载体存活状态
 
 ##### TradeDayCache 交易日缓存
 - **文件**: [worker/scheduler/trade_day_cache.py](file:///workspace/worker/scheduler/trade_day_cache.py)
 - **职责**: 缓存交易日信息，支持按交易日调度任务
 - **关键功能**:
   - 从中心端同步交易日历
-  - 本地缓存
-  - 交易日判断
+  - 本地缓存（set 数据结构）
+  - 交易日判断（is_trade_day）
+  - 定时刷新定时器（7200秒间隔）
+- **关键方法**:
+  - `update_trade_days(dates)`: 更新交易日缓存
+  - `update_trade_days_from_data(data)`: 从 gRPC 数据更新缓存
+  - `is_trade_day(target_date)`: 判断指定日期是否为交易日
+  - `start_refresh_timer()`: 启动定时刷新线程
 
 ##### 内置任务类型 (worker/scheduler/tasks/)
 - **LogCollectorTask**: [日志收集任务](file:///workspace/worker/scheduler/tasks/log_collector_task.py)
@@ -484,9 +498,18 @@
 - **文件**: [worker/adapter/base.py](file:///workspace/worker/adapter/base.py)
 - **职责**: 定义数据采集/输出适配器的统一接口
 - **关键功能**:
-  - 异步上下文管理
+  - 异步上下文管理（`__aenter__`/`__aexit__`）
   - 数据转换集成（与 transformer 模块联动）
-  - 转换链支持
+  - 转换链支持（`transform_chain` 方法）
+
+##### AdapterManager 适配器管理器
+- **文件**: [worker/adapter/base.py](file:///workspace/worker/adapter/base.py#L50-L103)
+- **职责**: 单例模式的适配器实例管理器
+- **关键功能**:
+  - 适配器实例缓存与复用
+  - 基于配置自动生成唯一键
+  - 批量关闭所有适配器
+  - atexit 自动清理
 
 ##### 内置适配器
 - **KafkaAdapter**: [Kafka 适配器](file:///workspace/worker/adapter/kafka_adapter.py) - Kafka 消息队列读写
@@ -513,6 +536,10 @@
 ##### TransformExecutor 转换执行器
 - **文件**: [worker/transformer/executor.py](file:///workspace/worker/transformer/executor.py)
 - **职责**: 执行单个转换任务，支持链式调用
+- **关键方法**:
+  - `execute(task_id, data, config)`: 执行单个任务转换
+  - `execute_chain(task_ids, data, configs)`: 执行任务链转换（按顺序）
+  - `last_error`: 获取最后一次执行错误
 
 ##### 内置转换脚本 (worker/transformer/scripts/)
 - **Aggregator**: [聚合脚本](file:///workspace/worker/transformer/scripts/aggregator.py) - 数据聚合
@@ -526,11 +553,14 @@
 - **文件**: [worker/main.py](file:///workspace/worker/main.py)
 - **职责**: Worker的主入口
 - **关键类**: `Worker`
-  - 初始化 gRPC 客户端
-  - 初始化任务调度器
-  - 初始化交易日缓存
-  - 注册任务类型
-  - 运行主循环
+  - 初始化 gRPC 客户端（CentralGrpcClient）
+  - 注册 Worker 到中心端
+  - 初始化任务调度器（TaskScheduler）
+  - 初始化交易日缓存（TradeDayCache）
+  - 建立组件间引用（grpc_client / scheduler / trade_day_cache）
+  - 注册任务类型（log_collector、metric_converter、database_collector、kafka_collector）
+  - 启动进程存活监控
+  - 运行主循环（60秒间隔）
   - 优雅关闭处理
 
 ---
@@ -817,6 +847,7 @@ ruff format .
 
 | 配置项 | 默认值 | 说明 |
 |--------|--------|------|
+| allow_origins | ["*"] | CORS 允许的来源 |
 | host | "0.0.0.0" | 监听地址 |
 | port | 5500 | 监听端口 |
 | debug | True | 调试模式 |
@@ -859,6 +890,8 @@ ruff format .
 | metric_batch_size | 500 | 指标批量大小 |
 | local_storage_path | worker/data | 本地存储路径 |
 | max_local_storage_size | 1024 | 最大存储大小（MB） |
+| allow_origins | ["*"] | CORS 允许的来源 |
+| api_key | "" | API 密钥 |
 | secret_key | "your-secret-key-here" | 密钥 |
 
 ---
@@ -1266,6 +1299,23 @@ python -m pytest tests/ --cov=master --cov=worker
 ## 联系方式
 
 如有问题或建议，请提交Issue或Pull Request。
+
+---
+
+## 更新于 2026-08-09
+
+- 今日无新增代码提交，仓库保持稳定状态（唯一提交 eccd581，2026-08-07）
+- 全面验证 README.md 文档与实际代码一致性，发现并修正以下差异：
+  - 更新执行模式描述：`PERIODIC`/`CONTINUOUS` → `THREAD`/`PROCESS`（与 base_task.py 实际实现一致）
+  - 补充 BaseTask 任务基类的关键方法：start/stop/pause/resume/is_alive
+  - 补充 TaskScheduler 关键功能：任务状态上报、5秒间隔进程监控、暂停/恢复支持
+  - 补充 TradeDayCache 关键方法：update_trade_days/update_trade_days_from_data/is_trade_day/start_refresh_timer
+  - 新增 AdapterManager 适配器管理器描述（单例模式、实例缓存、atexit 自动清理）
+  - 补充 TransformExecutor 关键方法：execute/execute_chain/last_error
+  - 完善 Worker 主入口描述：组件间引用建立、四种任务类型注册、60秒主循环
+  - Master 配置表补充 allow_origins 配置项
+  - Worker 配置表补充 allow_origins、api_key 配置项
+- 抽检 master/main.py、master/core/settings.py、master/apps/mcp_server/__init__.py、master/apps/gateway/controllers/base.py、worker/main.py、worker/core/settings.py、worker/scheduler/task_scheduler.py、worker/scheduler/base_task.py、worker/scheduler/trade_day_cache.py、worker/adapter/base.py、worker/transformer/executor.py 等核心文件，确认文档描述与实际代码匹配
 
 ---
 
