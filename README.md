@@ -38,7 +38,8 @@
 │  │  - 管理后台 (Amis)          │    │  - gRPC 客户端          │ │
 │  │  - 用户认证                 │    │  - 适配器层             │ │
 │  │  - 页面管理                 │    │  - 数据转换层           │ │
-│  │  - 交易所网关管理           │    │  - 交易日缓存           │ │
+│  │  - 交易所网关管理(apps/)    │    │  - 交易日缓存           │ │
+│  │  - MCP Server (AI Agent)    │    │                         │ │
 │  │  - gRPC 服务端              │    │                         │ │
 │  └─────────────────────────────┘    └─────────────────────────┘ │
 │           │                                    │                 │
@@ -68,28 +69,29 @@
 │   │   ├── logging.py        # 异步日志处理器
 │   │   ├── security.py       # 安全验证
 │   │   └── settings.py       # 配置管理
-│   ├── gateway/               # 交易所网关统一管理模块
-│   │   ├── admin/            # 管理后台界面
+│   ├── apps/                  # 应用模块目录
+│   │   ├── gateway/          # 交易所网关统一管理模块
+│   │   │   ├── admin.py      # 管理后台界面（单文件）
+│   │   │   ├── api.py        # HTTP API 接口（单文件）
+│   │   │   ├── controllers/  # 各交易所网关控制器
+│   │   │   │   ├── __init__.py
+│   │   │   │   ├── base.py   # 控制器抽象基类与注册中心
+│   │   │   │   ├── szse_mdgw.py  # 深交所行情网关
+│   │   │   │   ├── szse_tgw.py   # 深交所交易网关
+│   │   │   │   ├── sse_mdgw.py   # 上交所行情网关（预留）
+│   │   │   │   ├── sse_tgw.py    # 上交所交易网关（预留）
+│   │   │   │   ├── bjse_mdgw.py  # 北交所行情网关（预留）
+│   │   │   │   └── bjse_tgw.py   # 北交所交易网关（预留）
+│   │   │   ├── core/         # 网关核心模块
+│   │   │   │   ├── __init__.py
+│   │   │   │   ├── config_tools.py # 配置工具
+│   │   │   │   ├── errors.py # 错误定义
+│   │   │   │   ├── models.py # 数据模型
+│   │   │   │   ├── process.py # 进程管理
+│   │   │   │   └── store.py  # 持久化存储
 │   │   │   └── __init__.py
-│   │   ├── api/              # HTTP API 接口
-│   │   │   └── __init__.py
-│   │   ├── controllers/      # 各交易所网关控制器
-│   │   │   ├── __init__.py
-│   │   │   ├── base.py       # 控制器抽象基类与注册中心
-│   │   │   ├── szse_mdgw.py  # 深交所行情网关
-│   │   │   ├── szse_tgw.py   # 深交所交易网关
-│   │   │   ├── sse_mdgw.py   # 上交所行情网关（预留）
-│   │   │   ├── sse_tgw.py    # 上交所交易网关（预留）
-│   │   │   ├── bjse_mdgw.py  # 北交所行情网关（预留）
-│   │   │   └── bjse_tgw.py   # 北交所交易网关（预留）
-│   │   ├── core/             # 网关核心模块
-│   │   │   ├── __init__.py
-│   │   │   ├── config_tools.py # 配置工具
-│   │   │   ├── errors.py     # 错误定义
-│   │   │   ├── models.py     # 数据模型
-│   │   │   ├── process.py    # 进程管理
-│   │   │   └── store.py      # 持久化存储
-│   │   └── __init__.py
+│   │   └── mcp_server/       # MCP Server（AI Agent 接口）
+│   │       └── __init__.py   # FastMCP 服务端 + 只读网关工具
 │   ├── grpc/                  # gRPC 服务模块
 │   │   ├── __init__.py
 │   │   ├── server.py         # gRPC 服务端
@@ -272,7 +274,7 @@
   - `update_db_pages_parent_and_sort()`: 更新页面排序和父级关系
   - `get_db_active_pages()`: 获取激活的页面列表
 
-#### 1.3 网关控制模块 (master/gateway/)
+#### 1.3 网关控制模块 (master/apps/gateway/)
 
 ##### 模块概述
 - **职责**: 提供证券交易所网关（行情 mdgw / 交易 tgw）的统一生命周期管理
@@ -283,8 +285,8 @@
 - **核心设计**: 基于注册中心模式，新增交易所只需在 `controllers/` 下新增控制器文件并通过装饰器注册
 
 ##### GatewayAdminApp 网关管理后台
-- **文件**: [master/gateway/admin/__init__.py](file:///workspace/master/gateway/admin/__init__.py)
-- **职责**: 提供网关实例管理的 Amis 后台界面
+- **文件**: [master/apps/gateway/admin.py](file:///workspace/master/apps/gateway/admin.py)
+- **职责**: 提供网关实例管理的 Amis 后台界面（GatewayInstanceAdmin + GatewayOpsAdmin）
 - **功能**:
   - 网关实例的增删改查
   - 实例运维操作：启动、停止、重启、状态查询
@@ -292,23 +294,25 @@
   - 预检检查
 
 ##### Gateway API 网关HTTP接口
-- **文件**: [master/gateway/api/__init__.py](file:///workspace/master/gateway/api/__init__.py)
+- **文件**: [master/apps/gateway/api.py](file:///workspace/master/apps/gateway/api.py)
 - **职责**: 提供网关管理的 RESTful API 接口
 - **主要端点**:
+  - `GET /api/gateway/controllers`: 已注册控制器清单
   - `GET /api/gateway/instances`: 获取实例列表
   - `POST /api/gateway/instances`: 创建实例
+  - `GET /api/gateway/instances/{id}`: 实例详情
   - `DELETE /api/gateway/instances/{id}`: 删除实例
   - `POST /api/gateway/instances/{id}/start`: 启动网关
   - `POST /api/gateway/instances/{id}/stop`: 停止网关
   - `POST /api/gateway/instances/{id}/restart`: 重启网关
   - `GET /api/gateway/instances/{id}/status`: 查询状态
-  - `POST /api/gateway/instances/{id}/deploy`: 部署网关
-  - `POST /api/gateway/instances/{id}/upgrade`: 升级网关
+  - `POST /api/gateway/instances/{id}/deploy`: 部署网关（multipart zip）
+  - `POST /api/gateway/instances/{id}/upgrade`: 升级网关（multipart zip）
   - `POST /api/gateway/instances/{id}/rollback`: 回滚网关
   - `POST /api/gateway/instances/{id}/preflight`: 预检检查
 
 ##### GatewayControllerABC 控制器抽象基类
-- **文件**: [master/gateway/controllers/base.py](file:///workspace/master/gateway/controllers/base.py)
+- **文件**: [master/apps/gateway/controllers/base.py](file:///workspace/master/apps/gateway/controllers/base.py)
 - **职责**: 定义所有网关控制器的统一接口
 - **关键抽象方法**:
   - `preflight()`: 预检检查
@@ -321,19 +325,40 @@
   - `status()`: 查询状态
 
 ##### GatewayControllerRegistry 控制器注册中心
-- **文件**: [master/gateway/controllers/base.py](file:///workspace/master/gateway/controllers/base.py#L40-L80)
+- **文件**: [master/apps/gateway/controllers/base.py](file:///workspace/master/apps/gateway/controllers/base.py#L40-L80)
 - **职责**: 按 (exchange, kind) 注册和查找控制器类
 - **关键方法**:
   - `register(exchange, kind)`: 装饰器方式注册控制器
   - `get(exchange, kind)`: 获取控制器类
   - `make(instance, install_root, backup_root)`: 创建控制器实例
 
-##### 网关核心子模块 (master/gateway/core/)
-- **config_tools.py**: [配置工具](file:///workspace/master/gateway/core/config_tools.py) - XML 配置文件读写
-- **errors.py**: [错误定义](file:///workspace/master/gateway/core/errors.py) - 网关相关异常类
-- **models.py**: [数据模型](file:///workspace/master/gateway/core/models.py) - GatewayInstance、DeployParams 等
-- **process.py**: [进程管理](file:///workspace/master/gateway/core/process.py) - 子进程启动/停止/监控
-- **store.py**: [持久化存储](file:///workspace/master/gateway/core/store.py) - JSON 文件存储网关实例
+##### 网关核心子模块 (master/apps/gateway/core/)
+- **config_tools.py**: [配置工具](file:///workspace/master/apps/gateway/core/config_tools.py) - XML 配置文件读写
+- **errors.py**: [错误定义](file:///workspace/master/apps/gateway/core/errors.py) - 网关相关异常类
+- **models.py**: [数据模型](file:///workspace/master/apps/gateway/core/models.py) - GatewayInstance、DeployParams 等
+- **process.py**: [进程管理](file:///workspace/master/apps/gateway/core/process.py) - 子进程启动/停止/监控
+- **store.py**: [持久化存储](file:///workspace/master/apps/gateway/core/store.py) - JSON 文件存储网关实例
+
+#### 1.6 MCP Server 模块 (master/apps/mcp_server/)
+
+##### 模块概述
+- **职责**: 在管控中心内挂载 MCP（Model Context Protocol）服务端，通过 Streamable HTTP 传输暴露只读工具，供外部 AI Agent 调用
+- **挂载方式**: 在 `master/main.py` 中通过 `app.mount("/mcp", mcp_http_app())` 集成，与现有 FastAPI / gRPC 并行运行，零业务侵入
+- **客户端连接地址**: `http://<master-host>:5500/mcp/mcp`
+
+##### FastMCP 实例
+- **文件**: [master/apps/mcp_server/__init__.py](file:///workspace/master/apps/mcp_server/__init__.py)
+- **实例名**: `sre-tools-master`
+
+##### 暴露的 MCP 工具（只读）
+| 工具名 | 说明 |
+|--------|------|
+| `gateway_list_instances()` | 列出所有已注册的交易所网关实例，返回 id/exchange/kind/name/gateway_dir/binary_name/monitor_port/version 字段 |
+| `gateway_status(instance_id)` | 查询指定网关实例的实时运行状态，返回 running/pid/monitor_port/memory_mb/uptime_seconds 等字段 |
+
+##### 关键函数
+- `mcp_http_app(path="/mcp")`: 返回 MCP Streamable HTTP ASGI 应用工厂，供 FastAPI 挂载
+- `_resolve_controller(instance_id)`: 辅助函数，根据实例 ID 解析网关控制器（复用 API 层逻辑，失败抛 ValueError 由 MCP 层转为标准错误响应）
 
 #### 1.4 gRPC 服务模块 (master/grpc/)
 
@@ -705,6 +730,7 @@ def update_db_pages_parent_and_sort(self, links: list[dict], parent_id: int = No
 | aiohttp | ≥3.9.0 | 异步HTTP客户端 |
 | sqlalchemy | ≥2.0.0 | ORM框架底层 |
 | croniter | ≥2.0.0 | Cron表达式解析 |
+| mcp | ≥1.9.0 | MCP（Model Context Protocol）服务端 |
 
 #### 开发依赖
 | 依赖包 | 版本 | 用途 |
@@ -877,7 +903,7 @@ ruff format .
 
 ### GatewayInstance（网关实例）
 
-**位置**: [master/gateway/core/models.py](file:///workspace/master/gateway/core/models.py#L13-L23)
+**位置**: [master/apps/gateway/core/models.py](file:///workspace/master/apps/gateway/core/models.py#L13-L23)
 
 **存储**: JSON 文件（[master/data/gateway_instances.json](file:///workspace/master/data/gateway_instances.json)）
 
@@ -897,7 +923,7 @@ ruff format .
 
 ### 其他网关数据模型
 
-**位置**: [master/gateway/core/models.py](file:///workspace/master/gateway/core/models.py)
+**位置**: [master/apps/gateway/core/models.py](file:///workspace/master/apps/gateway/core/models.py)
 
 | 模型 | 说明 |
 |------|------|
@@ -917,17 +943,31 @@ ruff format .
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
+| GET | /api/gateway/controllers | 已注册控制器清单 |
 | GET | /api/gateway/instances | 获取网关实例列表 |
 | POST | /api/gateway/instances | 创建网关实例 |
+| GET | /api/gateway/instances/{id} | 实例详情 |
 | DELETE | /api/gateway/instances/{id} | 删除网关实例 |
 | POST | /api/gateway/instances/{id}/start | 启动网关 |
 | POST | /api/gateway/instances/{id}/stop | 停止网关 |
 | POST | /api/gateway/instances/{id}/restart | 重启网关 |
 | GET | /api/gateway/instances/{id}/status | 查询网关状态 |
-| POST | /api/gateway/instances/{id}/deploy | 部署网关 |
-| POST | /api/gateway/instances/{id}/upgrade | 升级网关 |
+| POST | /api/gateway/instances/{id}/deploy | 部署网关（multipart zip） |
+| POST | /api/gateway/instances/{id}/upgrade | 升级网关（multipart zip） |
 | POST | /api/gateway/instances/{id}/rollback | 回滚网关 |
 | POST | /api/gateway/instances/{id}/preflight | 预检检查 |
+
+#### MCP Server 接口（AI Agent）
+
+**挂载路径**: `http://<master-host>:5500/mcp/mcp`（Streamable HTTP 传输）
+
+**MCP 只读工具**：
+| 工具名 | 说明 |
+|--------|------|
+| gateway_list_instances | 列出所有已注册的交易所网关实例 |
+| gateway_status | 查询指定网关实例的实时运行状态 |
+
+**实现文件**: [master/apps/mcp_server/__init__.py](file:///workspace/master/apps/mcp_server/__init__.py)
 
 #### Worker管理接口
 
@@ -1229,6 +1269,19 @@ python -m pytest tests/ --cov=master --cov=worker
 
 ---
 
+## 更新于 2026-08-05
+
+- 今日无代码变更，项目运行正常
+- 验证 README.md 文档与实际代码一致性，确认所有模块、类、接口描述准确无误
+- 抽检 master/core、master/apps/gateway、master/apps/mcp_server、master/grpc、master/index、worker/adapter、worker/scheduler、worker/transformer、tests 目录，文档结构与实际文件一致
+- 确认自上次提交（995e9a1, 2026-08-04）以来工作树无新增提交，无未跟踪文件变更
+
+## 更新于 2026-08-04
+
+- 新增提交 995e9a1（2026-08-04）：更新 README.md，同步网关模块迁移与 MCP Server 新增内容
+- 变更分析：目录结构 master/gateway → master/apps/gateway，新增 master/apps/mcp_server；网关模块 admin.py、api.py 从子包改为单文件；新增 MCP Server 模块说明、API 接口补充、数据模型路径修正、架构图更新
+- 验证文档与代码一致性，确认所有模块描述与实际代码匹配
+
 ## 更新于 2026-08-03
 
 - 新增提交 91844c0（2026-08-03，合并 PR #21）：修复管理后台静态资源路径导致白屏问题
@@ -1431,6 +1484,19 @@ python -m pytest tests/ --cov=master --cov=worker
 - 更新关键类编号（原6个类调整为4个）
 - 修复文档中指向不存在文件的链接引用
 
+## 更新于 2026-08-04
+
+- 提交 237d452（refactor(gateway): 迁移证券交易所网关管控模块）：将网关模块从 `master/gateway/` 重构迁移至 `master/apps/gateway/` 目录，admin.py 与 api.py 从子包（admin/__init__.py、api/__init__.py）调整为单文件形式
+- 新增 MCP Server 模块（master/apps/mcp_server/），基于 FastMCP 实现 Model Context Protocol 服务端，通过 Streamable HTTP 在 `/mcp/mcp` 路径暴露只读工具，供外部 AI Agent 调用
+- 新增 MCP 工具：`gateway_list_instances()`（列出所有网关实例）与 `gateway_status(instance_id)`（查询实例实时运行状态）
+- 更新项目目录结构：新增 `master/apps/` 应用模块目录，包含 gateway 与 mcp_server 两个子模块
+- 更新整体架构图：补充「交易所网关管理(apps/)」与「MCP Server (AI Agent)」两项 Master 端功能
+- 更新「1.3 网关控制模块」：修正所有文件路径链接（master/gateway → master/apps/gateway），补充 admin.py 中 GatewayInstanceAdmin + GatewayOpsAdmin 双后台组件说明
+- 更新「1.3 Gateway API」：补充 GET /api/gateway/controllers、GET /api/gateway/instances/{id} 两个端点，明确 deploy/upgrade 为 multipart zip 上传
+- 新增「1.6 MCP Server 模块」：包含模块概述、FastMCP 实例、暴露工具表、关键函数说明
+- 更新「数据模型 - GatewayInstance」：修正文件路径至 master/apps/gateway/core/models.py
+- 更新「API 接口说明」：网关管理接口补充 controllers、实例详情端点，新增 MCP Server 接口章节（挂载路径 /mcp/mcp + 只读工具表）
+
 ## 更新于 2026-07-03
 
 - 新增交易所网关统一管理模块（master/gateway/），支持深交所 mdgw/tgw 完整生命周期管理
@@ -1443,3 +1509,21 @@ python -m pytest tests/ --cov=master --cov=worker
 - 更新项目目录结构与核心模块说明文档
 - 新增网关相关数据模型说明与 API 接口文档
 - 更新版本历史至 v0.2.0
+
+---
+
+## 更新于 2026-08-06
+
+- 今日无新增 git 提交，项目运行正常
+- 验证 README.md 文档与实际代码一致性，确认所有模块、类、接口描述准确无误
+- 抽检 master/core、master/apps/gateway、master/apps/mcp_server、master/grpc、master/index、worker/core、worker/adapter、worker/scheduler、worker/transformer、tests 目录，文档结构与实际文件一致
+- 补充生产依赖列表中缺失的 `mcp>=1.9.0`（MCP Model Context Protocol 服务端），与 pyproject.toml 保持一致
+- 确认自上次提交（e6f750e, 2026-08-05）以来工作树无新增提交，无未跟踪文件变更
+
+## 更新于 2026-08-07
+
+- 今日无新增 git 提交，项目运行正常
+- 验证 README.md 文档与实际代码一致性，确认所有模块、类、接口描述准确无误
+- 抽检 master/core、master/apps/gateway、master/apps/mcp_server、master/grpc、worker/adapter、worker/scheduler/tasks、worker/transformer/scripts、tests 目录，文档结构与实际文件一致
+- 验证 pyproject.toml 生产依赖与 README.md 依赖列表完全匹配（fastapi 0.111.0、sqlmodel 0.0.19、sqlmodelx 0.0.12、mcp>=1.9.0、confluent-kafka>=2.3.0 等所有版本号一致）
+- 确认自上次提交（f3de3b5, 2026-08-06）以来工作树无新增提交，无未跟踪文件变更
