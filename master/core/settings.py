@@ -1,5 +1,6 @@
 import sys
 import os
+from pathlib import Path
 from typing import Literal
 from urllib.parse import quote_plus
 
@@ -23,7 +24,7 @@ class Settings(admin.Settings):
     # database_url_async: str = (
     #     f"postgresql+asyncpg://itopr:{quote_plus('Ums2015@#')}@10.21.1.12:5432/itopr"
     # )
-    database_url_async: str = f"sqlite:///{os.path.join(MASTER_DIR, 'amisadmin.db')}?check_same_thread=False"
+    database_url_async: str = f"sqlite+aiosqlite:///{Path(MASTER_DIR, 'amisadmin.db').as_posix()}?check_same_thread=False"
     database_url: str = ""
     language: Literal["zh_CN", "en_US"] = "zh_CN"
     # amis_cdn: str = "https://npm.onmicrosoft.cn"
@@ -42,6 +43,16 @@ class Settings(admin.Settings):
     # 网关控制
     gateway_install_root: str = os.path.join(MASTER_DIR, "data", "gateways", "install")
     gateway_backup_root: str = os.path.join(MASTER_DIR, "data", "gateways", "backup")
+
+    @classmethod
+    def valid_database_url_(cls, values):
+        # 重写父类校验器:保留 file upload api 默认值设置,
+        # 但不注入父类的相对路径默认值,使子类 database_url_async
+        # 字段默认值(基于 MASTER_DIR 的绝对路径,Windows 兼容)自然生效。
+        file_upload_api = f"post:{values.get('site_path', '')}/file/upload"
+        values.setdefault("amis_image_receiver", file_upload_api)
+        values.setdefault("amis_file_receiver", file_upload_api)
+        return values
 
 
 settings = Settings()
