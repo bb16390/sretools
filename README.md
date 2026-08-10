@@ -286,12 +286,16 @@
 
 ##### GatewayAdminApp 网关管理后台
 - **文件**: [master/apps/gateway/admin.py](file:///workspace/master/apps/gateway/admin.py)
-- **职责**: 提供网关实例管理的 Amis 后台界面（GatewayInstanceAdmin + GatewayOpsAdmin）
+- **职责**: 提供网关实例管理的 Amis 后台界面
+- **类结构**:
+  - `GatewayAdminApp` - 网关分组应用（注册到 site）
+  - `GatewayInstanceAdmin` - 实例管理页（增删改查、状态查看、启停操作）
+  - `GatewayOpsAdmin` - 运维面板（批量操作、部署/升级/回滚、已注册控制器列表）
 - **功能**:
   - 网关实例的增删改查
   - 实例运维操作：启动、停止、重启、状态查询
-  - 部署、升级、回滚操作
-  - 预检检查
+  - 部署、升级、回滚操作（支持 multipart zip 上传）
+  - 已注册控制器清单查看
 
 ##### Gateway API 网关HTTP接口
 - **文件**: [master/apps/gateway/api.py](file:///workspace/master/apps/gateway/api.py)
@@ -309,7 +313,6 @@
   - `POST /api/gateway/instances/{id}/deploy`: 部署网关（multipart zip）
   - `POST /api/gateway/instances/{id}/upgrade`: 升级网关（multipart zip）
   - `POST /api/gateway/instances/{id}/rollback`: 回滚网关
-  - `POST /api/gateway/instances/{id}/preflight`: 预检检查
 
 ##### GatewayControllerABC 控制器抽象基类
 - **文件**: [master/apps/gateway/controllers/base.py](file:///workspace/master/apps/gateway/controllers/base.py)
@@ -488,6 +491,11 @@
   - 数据转换集成（与 transformer 模块联动）
   - 转换链支持
 
+##### AdapterManager 适配器管理器
+- **文件**: [worker/adapter/__init__.py](file:///workspace/worker/adapter/__init__.py)
+- **职责**: 统一管理适配器实例的创建、缓存和获取
+- **关键方法**: `get_or_create(adapter_cls, config)` - 按需创建并缓存适配器实例
+
 ##### 内置适配器
 - **KafkaAdapter**: [Kafka 适配器](file:///workspace/worker/adapter/kafka_adapter.py) - Kafka 消息队列读写
 - **SqlAdapter**: [SQL 适配器](file:///workspace/worker/adapter/sql_adapter.py) - 关系型数据库读写
@@ -515,10 +523,10 @@
 - **职责**: 执行单个转换任务，支持链式调用
 
 ##### 内置转换脚本 (worker/transformer/scripts/)
-- **Aggregator**: [聚合脚本](file:///workspace/worker/transformer/scripts/aggregator.py) - 数据聚合
-- **Filter**: [过滤脚本](file:///workspace/worker/transformer/scripts/filter.py) - 数据过滤
-- **Formatter**: [格式化脚本](file:///workspace/worker/transformer/scripts/formatter.py) - 数据格式化
-- **JsonParser**: [JSON解析脚本](file:///workspace/worker/transformer/scripts/json_parser.py) - JSON 解析
+- **JsonParser / JsonDumps**: [JSON解析/序列化脚本](file:///workspace/worker/transformer/scripts/json_parser.py) - JSON 解析与序列化
+- **Filter / ExcludeFields / PickFields**: [过滤脚本](file:///workspace/worker/transformer/scripts/filter.py) - 数据过滤与字段筛选
+- **Aggregator / Flatten / Unique**: [聚合脚本](file:///workspace/worker/transformer/scripts/aggregator.py) - 数据聚合、扁平化与去重
+- **Formatter / RenameFields / DateFormat**: [格式化脚本](file:///workspace/worker/transformer/scripts/formatter.py) - 数据格式化、字段重命名与日期格式化
 - **MetricConverter**: [指标转换脚本](file:///workspace/worker/transformer/scripts/metric_converter.py) - 指标格式转换
 
 #### 2.6 主入口 (worker/main.py)
@@ -955,7 +963,6 @@ ruff format .
 | POST | /api/gateway/instances/{id}/deploy | 部署网关（multipart zip） |
 | POST | /api/gateway/instances/{id}/upgrade | 升级网关（multipart zip） |
 | POST | /api/gateway/instances/{id}/rollback | 回滚网关 |
-| POST | /api/gateway/instances/{id}/preflight | 预检检查 |
 
 #### MCP Server 接口（AI Agent）
 
@@ -1268,6 +1275,17 @@ python -m pytest tests/ --cov=master --cov=worker
 如有问题或建议，请提交Issue或Pull Request。
 
 ---
+
+## 更新于 2026-08-10
+
+- 新增提交 4b81856（2026-08-10，合并远程主分支）：完整项目代码合入，涉及 246 个文件、95097 行新增
+- 变更分析：
+  - 验证 README.md 文档与实际代码一致性，全面抽检 master/、worker/、protos/、scripts/、tests/ 目录结构与文档描述匹配
+  - 更新「适配器模块」章节：补充 AdapterManager 适配器管理器说明，描述 `get_or_create()` 实例缓存机制
+  - 更新「数据转换模块」章节：补充全部已注册转换脚本变体（JsonDumps、ExcludeFields、PickFields、Flatten、Unique、RenameFields、DateFormat），修正脚本分组描述
+  - 更新「网关管理后台」章节：补充 GatewayAdminApp 类结构说明（GatewayInstanceAdmin + GatewayOpsAdmin），细化运维面板功能描述
+  - 修正 API 接口文档：移除未实现的 `/api/gateway/instances/{id}/preflight` 端点（控制器基类 `preflight()` 方法已定义但尚未暴露 HTTP 接口），保持文档与实际代码一致
+  - 确认依赖列表与 pyproject.toml 一致，MCP Server、gRPC、适配器、转换器等模块描述准确无误
 
 ## 更新于 2026-08-05
 
