@@ -3,7 +3,7 @@ import os
 import time
 from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
 from logging import FileHandler
-from dashboard.core.logging import AsyncFileHandler
+from master.core.logging import AsyncFileHandler
 import tempfile
 
 

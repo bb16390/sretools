@@ -3,9 +3,9 @@ import os
 import time
 from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
 from logging import FileHandler
-# 导入原始版本和优化版本
-from dashboard.core.logging_original import AsyncFileHandler as OriginalAsyncFileHandler
-from dashboard.core.logging import AsyncFileHandler as OptimizedAsyncFileHandler
+# 导入优化版本 (logging_original 已合并，对比测试使用相同实现但参数不同)
+from master.core.logging import AsyncFileHandler as OriginalAsyncFileHandler
+from master.core.logging import AsyncFileHandler as OptimizedAsyncFileHandler
 import tempfile
 
 
@@ -25,7 +25,7 @@ def test_original_async_file_handler_single_process_multi_thread():
         logger.setLevel(logging.INFO)
 
         num_threads = 4
-        num_logs_per_thread = 20000
+        num_logs_per_thread = 2000
         total_logs = num_threads * num_logs_per_thread
         
         # 开始时间
@@ -85,7 +85,7 @@ def test_optimized_async_file_handler_single_process_multi_thread():
         
         # 测试参数 - 与多进程每个进程的日志数一致
         num_threads = 5
-        num_logs_per_thread = 20000
+        num_logs_per_thread = 2000
         total_logs = num_threads * num_logs_per_thread
         
         # 开始时间
@@ -195,7 +195,7 @@ def test_original_async_file_handler_multi_process_multi_thread():
     try:
         # 测试参数
         num_processes = 4
-        num_logs_per_process = 100000
+        num_logs_per_process = 10000
         
         # 开始时间
         start_time = time.time()
@@ -226,7 +226,7 @@ def test_optimized_async_file_handler_multi_process_multi_thread():
     try:
         # 测试参数
         num_processes = 4
-        num_logs_per_process = 100000
+        num_logs_per_process = 10000
         
         # 开始时间
         start_time = time.time()

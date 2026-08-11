@@ -278,8 +278,8 @@ LANGUAGE=zh_CN
 
 # ----- 日志 -----
 LOG_LEVEL=${MASTER_LOG_LEVEL:-INFO}
-LOG_DIR=${MASTER_DIR}/log/uvicorn.log
-ERROR_LOG_DIR=${MASTER_DIR}/log/uvicorn-error.log
+LOG_FILE=${PROJECT_ROOT}/logs/master.log
+ERROR_LOG_FILE=${PROJECT_ROOT}/logs/master-error.log
 
 # ----- 安全 -----
 SECRET_KEY=${SECRET_KEY}
@@ -334,8 +334,8 @@ WORKER_ID=${WORKER_ID:-worker_1}
 
 # ----- 日志 -----
 LOG_LEVEL=${WORKER_LOG_LEVEL:-INFO}
-LOG_DIR=${WORKER_DIR}/log/worker.log
-ERROR_LOG_DIR=${WORKER_DIR}/log/worker-error.log
+LOG_FILE=${PROJECT_ROOT}/logs/worker.log
+ERROR_LOG_FILE=${PROJECT_ROOT}/logs/worker-error.log
 
 # ----- 日志收集 -----
 LOG_COLLECT_INTERVAL=${LOG_COLLECT_INTERVAL:-5}

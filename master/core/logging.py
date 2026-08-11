@@ -1,7 +1,7 @@
 import os
 import logging
 from logging import FileHandler, LogRecord, WARNING
-from logging.handlers import QueueHandler
+from logging.handlers import QueueHandler, TimedRotatingFileHandler
 from queue import Queue, Empty
 from threading import Thread, Event
 import atexit
@@ -9,24 +9,18 @@ import time
 from time import sleep
 
 class AsyncFileHandler(QueueHandler):
-    def __init__(self, file_handler: FileHandler, max_queue_size: int = 10000, drop_threshold: float = 0.8, batch_size: int = 500, flush_interval: float = 0.2) -> None:
+    def __init__(self, base_handler: logging.Handler, max_queue_size: int = 10000, drop_threshold: float = 0.8, batch_size: int = 500, flush_interval: float = 0.2) -> None:
         queue = Queue(maxsize=max_queue_size)
         super().__init__(queue)
-        # 使用 Event 来控制优雅关闭
         self.shutdown_event = Event()
-        # 原FileHandler
-        self._file_handler = file_handler
+        self._file_handler = base_handler
         self._exit = False
-        # 队列配置
         self._max_size = max_queue_size
         self._drop_size = int(max_queue_size * drop_threshold)
-        # 批处理配置
         self._batch_size = batch_size
         self._flush_interval = flush_interval
-        # 性能指标
         self._processed_count = 0
         self._start_time = time.time()
-        # 写线程
         self._write_thread = Thread(target=self.write, daemon=True)
         self._write_thread.start()
         atexit.register(self.close)
@@ -39,7 +33,6 @@ class AsyncFileHandler(QueueHandler):
         self.shutdown_event.set()
         self._write_thread.join()
 
-        # 清空队列
         while True:
             try:
                 record = self.queue.get_nowait()
@@ -47,22 +40,19 @@ class AsyncFileHandler(QueueHandler):
             except Empty:
                 break
             except Exception as e:
-                # 记录错误但继续清空队列
                 import traceback
                 print(f"Error during queue cleanup: {e}")
                 traceback.print_exc()
                 break
 
     def write(self):
-        # 使用内存缓冲区，减少磁盘I/O操作
         buffer = []
         buffer_size = 0
         max_buffer_size = self._batch_size
         
         while not self.shutdown_event.is_set():
             try:
-                # 批量获取日志记录
-                for _ in range(100):  # 一次尝试获取多条
+                for _ in range(100):
                     try:
                         record = self.queue.get(timeout=0.01)
                         buffer.append(record)
@@ -72,7 +62,6 @@ class AsyncFileHandler(QueueHandler):
                     except Empty:
                         break
                 
-                # 批量处理日志
                 if buffer:
                     for record in buffer:
                         try:
@@ -83,11 +72,9 @@ class AsyncFileHandler(QueueHandler):
                             print(f"Error handling log record: {e}")
                             traceback.print_exc()
                     
-                    # 清空缓冲区
                     buffer = []
                     buffer_size = 0
                     
-                    # 刷新文件缓冲
                     try:
                         if hasattr(self._file_handler, 'flush'):
                             self._file_handler.flush()
@@ -96,15 +83,11 @@ class AsyncFileHandler(QueueHandler):
                         print(f"Error flushing file handler: {e}")
                         traceback.print_exc()
             except Exception as e:
-                # 记录错误但继续运行
                 import traceback
                 print(f"Error processing log: {e}")
                 traceback.print_exc()
     
     def _process_batch(self, batch):
-        """
-        处理批处理日志
-        """
         for record in batch:
             try:
                 self._file_handler.handle(record)
@@ -114,7 +97,6 @@ class AsyncFileHandler(QueueHandler):
                 print(f"Error handling log record: {e}")
                 traceback.print_exc()
         
-        # 刷新文件缓冲
         try:
             if hasattr(self._file_handler, 'flush'):
                 self._file_handler.flush()
@@ -127,50 +109,83 @@ class AsyncFileHandler(QueueHandler):
         self.enqueue(record)
 
     def enqueue(self, record: LogRecord) -> None:
-        """
-        确保日志不被丢弃，使用阻塞方式入队
-        """
-        # 使用阻塞方式入队，确保日志不被丢弃
         self.queue.put(record)
 
     def get_queue_size(self) -> int:
-        """
-        获取当前队列大小
-        """
         return self.queue.qsize()
 
     def get_processing_speed(self) -> float:
-        """
-        获取日志处理速度（条/秒）
-        """
         elapsed = time.time() - self._start_time
         if elapsed == 0:
             return 0
         return self._processed_count / elapsed
 
 
+def _create_rotating_handler(file_path: str, formatter: logging.Formatter, log_level_str: str, settings) -> AsyncFileHandler:
+    log_dir = os.path.dirname(file_path)
+    os.makedirs(log_dir, exist_ok=True)
+
+    timed_handler = TimedRotatingFileHandler(
+        filename=file_path,
+        when=settings.log_rotation_when,
+        interval=settings.log_rotation_interval,
+        backupCount=settings.log_backup_count,
+        encoding=settings.log_rotation_encoding,
+        delay=True,
+    )
+    timed_handler.setLevel(getattr(logging, log_level_str))
+    timed_handler.setFormatter(formatter)
+
+    async_handler = AsyncFileHandler(base_handler=timed_handler)
+    async_handler.setLevel(getattr(logging, log_level_str))
+
+    return async_handler
+
+
 def setup_logging(settings) -> None:
-    # 配置日志系统
-    log_dir = os.path.dirname(settings.log_dir)
-    if not os.path.exists(log_dir):
-        os.makedirs(log_dir, exist_ok=True)
+    logger_names = ["", "uvicorn", "uvicorn.error", "uvicorn.access"]
+    for name in logger_names:
+        logger = logging.getLogger(name)
+        for h in list(logger.handlers):
+            if isinstance(h, AsyncFileHandler):
+                logger.removeHandler(h)
 
-    # 创建 FileHandler
-    file_handler = FileHandler(settings.log_dir, encoding='utf-8')
-    file_handler.setLevel(getattr(logging, settings.log_level))
+    main_formatter = logging.Formatter(settings.log_format)
+    access_formatter = logging.Formatter(settings.access_log_format)
 
-    # 创建 AsyncFileHandler
-    async_file_handler = AsyncFileHandler(file_handler)
+    main_handler = _create_rotating_handler(settings.log_file, main_formatter, settings.log_level, settings)
+    error_handler = _create_rotating_handler(settings.error_log_file, main_formatter, "WARNING", settings)
 
-    # 配置日志格式
-    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    file_handler.setFormatter(formatter)
+    log_level = getattr(logging, settings.log_level)
 
-    # 添加处理器到根日志器
-    root_logger = logging.getLogger()
-    # 去重：移除已有的 AsyncFileHandler，避免重复堆叠导致日志重复输出
-    for h in list(root_logger.handlers):
-        if isinstance(h, AsyncFileHandler):
-            root_logger.removeHandler(h)
-    root_logger.setLevel(getattr(logging, settings.log_level))
-    root_logger.addHandler(async_file_handler)
+    root_logger = logging.getLogger("")
+    root_logger.setLevel(log_level)
+    root_logger.addHandler(main_handler)
+    root_logger.addHandler(error_handler)
+
+    uvicorn_logger = logging.getLogger("uvicorn")
+    uvicorn_logger.setLevel(log_level)
+    uvicorn_logger.addHandler(main_handler)
+    uvicorn_logger.addHandler(error_handler)
+    uvicorn_logger.propagate = False
+
+    uvicorn_error_logger = logging.getLogger("uvicorn.error")
+    uvicorn_error_logger.setLevel(log_level)
+    uvicorn_error_logger.addHandler(main_handler)
+    uvicorn_error_logger.addHandler(error_handler)
+    uvicorn_error_logger.propagate = False
+
+    uvicorn_access_logger = logging.getLogger("uvicorn.access")
+    uvicorn_access_logger.setLevel(log_level)
+    uvicorn_access_logger.addHandler(main_handler)
+    uvicorn_access_logger.propagate = False
+
+
+def get_uvicorn_log_config(settings) -> dict:
+    return {
+        "version": 1,
+        "disable_existing_loggers": False,
+        "formatters": {},
+        "handlers": {},
+        "loggers": {},
+    }

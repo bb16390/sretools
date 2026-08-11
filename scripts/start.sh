@@ -259,31 +259,21 @@ start_master() {
         return 1
     fi
 
-    # 读取配置（从 .env 或 settings 默认值）
+    # 读取配置（仅用于脚本提示，实际 host/port 由 settings 决定，可通过 HOST/PORT 环境变量覆盖）
     local master_host="${HOST:-0.0.0.0}"
     local master_port="${PORT:-5500}"
 
-    log_info "Master 监听地址: ${master_host}:${master_port}"
+    log_info "Master 监听地址: ${master_host}:${master_port} (仅用于提示，实际由 settings 决定)"
 
-    # 关键：从 PROJECT_ROOT 启动，避免路径冲突
-    local launch_cmd
-    if command -v uv &> /dev/null; then
-        # 进入 MASTER_DIR 运行，因为 master/main.py 中有相对路径
-        launch_cmd="cd '$PROJECT_ROOT' && uv run python -c \"import sys; sys.path.insert(0, '$MASTER_DIR'); from main import app; import uvicorn; uvicorn.run(app, host='${master_host}', port=${master_port}, access_log=False)\""
-    else
-        launch_cmd="cd '$PROJECT_ROOT' && PYTHONPATH='${MASTER_DIR}:${PROJECT_ROOT}' '${python_cmd}' -c \"from main import app; import uvicorn; uvicorn.run(app, host='${master_host}', port=${master_port}, access_log=False)\""
-    fi
-
-    # 实际上直接用 uvicorn module 方式，从正确的目录启动
-    # 但 master/main.py 有自己的相对路径导入，我们直接在 master 目录启动
+    # 统一入口：从 PROJECT_ROOT 执行 uv run python -m master.main，走 __main__ 分支复用 build_uvicorn_kwargs
     local actual_cmd
     if command -v uv &> /dev/null; then
-        actual_cmd="cd '$MASTER_DIR' && uv run python -m uvicorn main:app --host '${master_host}' --port ${master_port}"
+        actual_cmd="cd '$PROJECT_ROOT' && exec uv run python -m master.main"
     else
-        actual_cmd="cd '$MASTER_DIR' && PYTHONPATH='${MASTER_DIR}:${PROJECT_ROOT}' '${python_cmd}' -m uvicorn main:app --host '${master_host}' --port ${master_port}"
+        actual_cmd="cd '$PROJECT_ROOT' && exec '${python_cmd}' -m master.main"
     fi
 
-    nohup bash -c "$actual_cmd" > "$MASTER_LOG" 2>&1 &
+    nohup bash -c "$actual_cmd" > "$LOG_DIR/master-stdout.log" 2>&1 &
     local pid=$!
     echo "$pid" > "$MASTER_PID_FILE"
     disown "$pid" 2>/dev/null || true
@@ -292,11 +282,17 @@ start_master() {
     sleep 1
     if ! kill -0 "$pid" 2>/dev/null; then
         log_error "Master 服务启动失败 (进程已退出)"
-        log_error "请查看日志: tail -n 50 $MASTER_LOG"
+        log_error "请查看主日志: tail -n 50 $MASTER_LOG"
+        log_error "或控制台输出: tail -n 50 $LOG_DIR/master-stdout.log"
+        if [ -f "$LOG_DIR/master-stdout.log" ]; then
+            echo "----- 最近控制台输出 -----"
+            tail -n 20 "$LOG_DIR/master-stdout.log" || true
+            echo "-------------------------"
+        fi
         if [ -f "$MASTER_LOG" ]; then
-            echo "----- 最近日志 -----"
+            echo "----- 最近主日志 -----"
             tail -n 20 "$MASTER_LOG" || true
-            echo "-------------------"
+            echo "---------------------"
         fi
         rm -f "$MASTER_PID_FILE"
         return 1
@@ -308,12 +304,14 @@ start_master() {
             log_ok "Master 服务已启动 (PID: $pid) -> http://${master_host}:${master_port}"
         else
             log_warn "Master 进程运行中 (PID: $pid)，但 HTTP 端口尚未就绪"
-            log_warn "日志文件: $MASTER_LOG"
+            log_warn "主日志文件: $MASTER_LOG"
+            log_warn "控制台输出: $LOG_DIR/master-stdout.log"
         fi
     else
         log_ok "Master 服务已启动 (PID: $pid)"
     fi
-    log_info "日志文件: $MASTER_LOG"
+    log_info "主日志文件: $MASTER_LOG"
+    log_info "控制台输出: $LOG_DIR/master-stdout.log"
     return 0
 }
 

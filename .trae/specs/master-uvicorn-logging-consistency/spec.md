@@ -11,12 +11,13 @@
 - **G-3**: 统一两种启动方式（`python master/main.py` 与 `scripts/start.sh`）的日志输出路径和格式
 - **G-4**: uvicorn 自身的 access log、error log 也纳入统一的日志配置体系
 - **G-5**: `setup_logging()` 能同时配置应用日志与 uvicorn 日志，保证两者格式、路径、级别一致
+- **G-6**: 所有日志文件（主日志/错误日志/access log）均支持按日自动轮转，并保留历史文件
 
 ## Non-Goals (Out of Scope)
 - 不修改 worker 模块的日志/启动方式（仅聚焦 master）
 - 不引入新的日志框架（仍使用标准库 logging + uvicorn 默认 log_config 机制）
-- 不修改日志异步写入机制（保留现有 `AsyncFileHandler`）
-- 不做日志轮转（rotate）策略的变更，仅保证路径格式一致
+- 不修改日志异步写入机制（保留现有 `AsyncFileHandler`，但将内部 FileHandler 替换为 TimedRotatingFileHandler）
+- 不实现按大小轮转（仅按日轮转 `midnight`）
 - 不重构 scripts 中的整体架构（仅修改 master 启停相关部分）
 
 ## Background & Context
@@ -40,11 +41,16 @@
   - `log_format: str`（日志格式字符串，提供默认值）
   - `access_log_format: str`（uvicorn access log 格式字符串，提供默认值）
   - 将命名误导的 `log_dir` 调整为语义清晰的字段（如 `log_file`、`access_log_file`、`error_log_file`），或保留字段名但确保注释清晰，并统一日志目录为 `$PROJECT_ROOT/logs/`（与 scripts 的 `LOG_DIR` 一致）
+  - `log_rotation_when: str`（轮转时间单位，默认 `midnight` 即每日零点）
+  - `log_rotation_interval: int`（轮转间隔，默认 1，配合 when=midnight 即每日一次）
+  - `log_backup_count: int`（保留的历史日志文件份数，默认 30，即保留 30 天）
+  - `log_rotation_encoding: str`（轮转后文件编码，默认 `utf-8`）
 - **FR-3**: `master/core/logging.py` 中 `setup_logging(settings)` 增强：
   - 同时配置根 logger 与 uvicorn 相关 logger（`uvicorn`、`uvicorn.access`、`uvicorn.error`）
   - 所有 logger 使用 settings 中的级别、格式
   - access log 与 error log 可分别写入 settings 指定文件（或统一文件，由 settings 决定）
-  - 保持 `AsyncFileHandler` 异步写入能力
+  - **用 `logging.handlers.TimedRotatingFileHandler` 替换原 `FileHandler`**，轮转参数（when/interval/backupCount/encoding）全部来自 settings，主日志、access log、error log 各自独立轮转
+  - `AsyncFileHandler` 内部包装的 handler 由 `FileHandler` 改为 `TimedRotatingFileHandler`，异步队列、批处理、关闭清理逻辑保持不变
   - 去重逻辑：避免多次调用时 handler 堆叠
 - **FR-4**: 提供统一的 uvicorn 配置入口：
   - 在 `master/core/settings.py` 或 `master/core/logging.py` 中提供 `get_uvicorn_log_config(settings)` 函数，返回 uvicorn 接受的 `log_config` dict，其路径/格式/级别均来自 settings
@@ -145,6 +151,26 @@
 - **When**: 全文搜索 host/port/log path/log format 等关键字在 master 相关代码中的出现位置
 - **Then**: 除 `master/core/settings.py` 定义处和读取处外，无硬编码的日志路径、格式或 uvicorn 运行参数；scripts 中仅保留读取/展示逻辑，不硬编码值
 - **Verification**: `human-judgment`
+
+### AC-9: 日志按日轮转机制生效
+- **Given**: settings 中 `log_rotation_when="midnight"`, `log_rotation_interval=1`, `log_backup_count=30`
+- **When**: 使用 `TimedRotatingFileHandler` 创建 handler，并人为触发一次轮转（或通过 `doRollover()` 调用）
+- **Then**:
+  1. 原日志文件被重命名为带日期后缀的归档文件（标准 `TimedRotatingFileHandler` 命名后缀，如 `master.log.2026-08-11`）
+  2. 新建的主日志文件为空，后续日志写入新文件
+  3. 轮转文件数量超过 `log_backup_count` 时，最旧的归档日志被自动删除
+  4. access log 与（若存在独立文件的）error log 轮转行为相同
+- **Verification**: `programmatic`
+- **Notes**: 可以通过直接调用 handler.doRollover() 来模拟，无需等到次日零点
+
+### AC-10: AsyncFileHandler 与 TimedRotatingFileHandler 协作正确
+- **Given**: `setup_logging(settings)` 已完成，AsyncFileHandler 包装的底层 handler 为 TimedRotatingFileHandler
+- **When**: 连续写入一批日志后，手动调用 `doRollover()`，再继续写入一批日志
+- **Then**:
+  1. 轮转期间日志不因异步队列而丢失（队列清空在轮转期间仍正常写入新旧文件）
+  2. `close()` 行为正常：关闭时队列为空，轮转文件句柄被正确释放
+  3. 轮转后的归档文件编码为 `utf-8`，内容可读、格式正确
+- **Verification**: `programmatic`
 
 ## Open Questions
 - [ ] 日志最终输出路径：确认统一到 `$PROJECT_ROOT/logs/master.log`（与脚本现有 LOG_DIR 一致）是否符合预期？还是保留 `master/log/` 并修改 scripts？

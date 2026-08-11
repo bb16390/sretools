@@ -8,6 +8,10 @@ from fastapi_amis_admin import admin
 
 # 获取master目录的绝对路径
 MASTER_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# 项目根目录 (master 目录的上一级)
+PROJECT_ROOT = os.path.dirname(MASTER_DIR)
+# 所有日志文件统一存放目录
+LOGS_DIR = os.path.join(PROJECT_ROOT, "logs")
 
 
 class Settings(admin.Settings):
@@ -33,10 +37,25 @@ class Settings(admin.Settings):
     amis_pkg: str = "amis"
     amis_theme: Literal["cxd", "antd", "dark", "ang"] = "cxd"
     static_dir: str = os.path.join(MASTER_DIR, "static")
-    # 日志配置
+
+    # ========== uvicorn 运行参数 ==========
+    uvicorn_reload: bool = False
+    uvicorn_workers: int = 1
+    uvicorn_access_log: bool = True
+
+    # ========== 日志配置 ==========
     log_level: str = "DEBUG"
-    log_dir: str = os.path.join(MASTER_DIR, "log", "uvicorn.log")
-    error_log_dir: str = os.path.join(MASTER_DIR, "log", "uvicorn-error.log")
+    log_file: str = os.path.join(LOGS_DIR, "master.log")
+    error_log_file: str = os.path.join(LOGS_DIR, "master-error.log")
+    # 日志格式
+    log_format: str = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    access_log_format: str = '%(asctime)s - %(name)s - %(levelname)s - %(client_addr)s - "%(request_line)s" %(status_code)s'
+    # 日志轮转参数
+    log_rotation_when: str = "midnight"
+    log_rotation_interval: int = 1
+    log_backup_count: int = 30
+    log_rotation_encoding: str = "utf-8"
+
     template_name: str = os.path.join(MASTER_DIR, "templates")
     # 安全配置
     secret_key: str = "your-secret-key-here"

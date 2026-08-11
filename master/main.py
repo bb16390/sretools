@@ -77,7 +77,7 @@ from starlette.responses import RedirectResponse  # noqa: E402
 from master.index.admin import NavPageAdmin  # noqa: E402
 from master.index.file_upload_admin import FileUploadApp  # noqa: E402
 from master.core.globals import auth, site  # noqa: E402
-from master.core.logging import AsyncFileHandler, setup_logging  # noqa: E402
+from master.core.logging import AsyncFileHandler, setup_logging, get_uvicorn_log_config  # noqa: E402
 from master.core.settings import settings  # noqa: E402
 from fastapi_amis_admin.crud.schema import BaseApiOut  # noqa: E402
 
@@ -86,6 +86,20 @@ setup_logging(settings)
 
 # 日志logger
 logger = logging.getLogger(__name__)
+
+
+def build_uvicorn_kwargs(settings) -> dict:
+    """构造 uvicorn.run/uvicorn.Config 所需的全部关键字参数，值全部来自 settings。"""
+    return {
+        "host": settings.host,
+        "port": settings.port,
+        "reload": settings.uvicorn_reload,
+        "workers": settings.uvicorn_workers,
+        "access_log": settings.uvicorn_access_log,
+        "log_config": get_uvicorn_log_config(settings),
+        "loop": "auto",
+        "http": "auto",
+    }
 
 
 class FastAPI(FastAPIBase):
@@ -213,13 +227,12 @@ app.add_middleware(
 if __name__ == "__main__":
     import uvicorn
 
-    config = uvicorn.Config(
-        "master.main:app",
-        host=settings.host,
-        port=settings.port,
-        access_log=True,
-        reload=True,
-    )
+    uvicorn_kwargs = build_uvicorn_kwargs(settings)
+    # reload 模式下 uvicorn 要求 app 是模块路径字符串；否则可以直接传 app 对象
+    if uvicorn_kwargs.get("reload"):
+        # 使用字符串形式，让 uvicorn.Config 内部自行处理 reload 的子进程重启
+        config = uvicorn.Config("master.main:app", **uvicorn_kwargs)
+    else:
+        config = uvicorn.Config(app, **uvicorn_kwargs)
     server = uvicorn.Server(config)
-
     server.run()
