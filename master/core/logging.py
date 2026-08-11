@@ -163,7 +163,7 @@ def setup_logging(settings) -> None:
     async_file_handler = AsyncFileHandler(file_handler)
 
     # 配置日志格式
-    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    formatter = logging.Formatter(settings.log_format)
     file_handler.setFormatter(formatter)
 
     # 添加处理器到根日志器
