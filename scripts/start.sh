@@ -23,7 +23,7 @@ WORKER_PID_FILE="$PID_DIR/worker.pid"
 
 # 日志目录
 LOG_DIR="$PROJECT_ROOT/logs"
-MASTER_LOG="$LOG_DIR/master.log"
+MASTER_LOG=""  # 在 start_master 中动态从 settings.py 读取
 WORKER_LOG="$LOG_DIR/worker.log"
 
 # 颜色定义
@@ -117,6 +117,27 @@ load_project_envs() {
     load_env_file "$PROJECT_ROOT/.env" 2>/dev/null || true
     load_env_file "$MASTER_DIR/.env" 2>/dev/null || true
     load_env_file "$WORKER_DIR/.env" 2>/dev/null || true
+}
+
+# 从 master/core/settings.py 读取 master 日志文件路径
+get_master_log_file() {
+    local python_cmd
+    python_cmd=$(detect_python_cmd)
+    if [ -z "$python_cmd" ]; then
+        echo "$MASTER_DIR/log/uvicorn.log"
+        return 0
+    fi
+    local log_file
+    if command -v uv &> /dev/null; then
+        log_file=$(cd "$PROJECT_ROOT" && uv run python -c "from master.core.settings import settings; print(settings.log_dir)" 2>/dev/null || true)
+    else
+        log_file=$(cd "$PROJECT_ROOT" && PYTHONPATH="$PROJECT_ROOT" "$python_cmd" -c "from master.core.settings import settings; print(settings.log_dir)" 2>/dev/null || true)
+    fi
+    if [ -n "$log_file" ]; then
+        echo "$log_file"
+    else
+        echo "$MASTER_DIR/log/uvicorn.log"
+    fi
 }
 
 # ------------------------------
@@ -283,7 +304,9 @@ start_master() {
         actual_cmd="cd '$MASTER_DIR' && PYTHONPATH='${MASTER_DIR}:${PROJECT_ROOT}' '${python_cmd}' -m uvicorn main:app --host '${master_host}' --port ${master_port}"
     fi
 
-    nohup bash -c "$actual_cmd" > "$MASTER_LOG" 2>&1 &
+    MASTER_LOG=$(get_master_log_file)
+    mkdir -p "$(dirname "$MASTER_LOG")"
+    nohup bash -c "$actual_cmd" >> "$MASTER_LOG" 2>&1 &
     local pid=$!
     echo "$pid" > "$MASTER_PID_FILE"
     disown "$pid" 2>/dev/null || true
@@ -549,7 +572,8 @@ show_status() {
     print_status_line "Worker" "$WORKER_PID_FILE"
     echo "=========================================="
     echo ""
-    echo "日志目录: $LOG_DIR"
+    echo "Master 日志: $(get_master_log_file)"
+    echo "Worker 日志: $WORKER_LOG"
     echo "PID 目录: $PID_DIR"
     echo ""
 }

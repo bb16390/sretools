@@ -69,6 +69,30 @@ is_running() {
     return 1
 }
 
+# 从 master/core/settings.py 读取 master 日志文件路径
+get_master_log_file() {
+    local python_cmd
+    if command -v python3 &> /dev/null; then
+        python_cmd="python3"
+    elif command -v python &> /dev/null; then
+        python_cmd="python"
+    else
+        echo "$PROJECT_ROOT/master/log/uvicorn.log"
+        return 0
+    fi
+    local log_file
+    if command -v uv &> /dev/null; then
+        log_file=$(cd "$PROJECT_ROOT" && uv run python -c "from master.core.settings import settings; print(settings.log_dir)" 2>/dev/null || true)
+    else
+        log_file=$(cd "$PROJECT_ROOT" && PYTHONPATH="$PROJECT_ROOT" "$python_cmd" -c "from master.core.settings import settings; print(settings.log_dir)" 2>/dev/null || true)
+    fi
+    if [ -n "$log_file" ]; then
+        echo "$log_file"
+    else
+        echo "$PROJECT_ROOT/master/log/uvicorn.log"
+    fi
+}
+
 # 杀死主进程及其整个进程组
 kill_process_tree() {
     local pid=$1
@@ -214,7 +238,8 @@ show_status() {
     print_status_line "Worker"  "$WORKER_PID_FILE"
     echo "=========================================="
     echo ""
-    echo "日志目录: $LOG_DIR"
+    echo "Master 日志: $(get_master_log_file)"
+    echo "Worker 日志: $LOG_DIR/worker.log"
     echo "PID  目录: $PID_DIR"
     echo ""
 }

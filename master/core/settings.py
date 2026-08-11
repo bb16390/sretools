@@ -37,6 +37,7 @@ class Settings(admin.Settings):
     log_level: str = "DEBUG"
     log_dir: str = os.path.join(MASTER_DIR, "log", "uvicorn.log")
     error_log_dir: str = os.path.join(MASTER_DIR, "log", "uvicorn-error.log")
+    log_format: str = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     template_name: str = os.path.join(MASTER_DIR, "templates")
     # 安全配置
     secret_key: str = "your-secret-key-here"

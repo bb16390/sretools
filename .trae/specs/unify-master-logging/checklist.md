@@ -1,0 +1,11 @@
+- [x] `master/core/settings.py` 中存在 `log_format` 字段，默认值为 `'%(asctime)s - %(name)s - %(levelname)s - %(message)s'`
+- [x] `master/core/logging.py` 的 `setup_logging` 使用 `settings.log_format` 创建 Formatter，不再硬编码格式字符串
+- [x] `master/core/logging.py` 其余逻辑（目录创建、utf-8 编码、AsyncFileHandler 包装、根 logger 去重）保持不变
+- [x] `scripts/start.sh` 新增 `get_master_log_file()` 函数，从 `master.core.settings` 读取 `settings.log_dir`
+- [x] `scripts/start.sh` 中 `MASTER_LOG` 变量来自 `get_master_log_file()`，不再硬编码为 `$LOG_DIR/master.log`
+- [x] `scripts/start.sh` 在重定向前创建日志目录 `mkdir -p "$(dirname "$MASTER_LOG")"`
+- [x] `scripts/start.sh` 使用 `>> "$MASTER_LOG"` 追加模式重定向，与 FileHandler 的 append 模式一致
+- [x] `scripts/start.sh` 中 worker 的 `LOG_DIR`/`WORKER_LOG` 保持不变
+- [x] `scripts/start.sh` 的 `show_status()` 展示 master 日志路径来自 settings，而非硬编码 `$LOG_DIR`
+- [x] `scripts/stop.sh` 的 `show_status()` 展示 master 日志路径来自 settings，与 `start.sh` 一致
+- [x] 直接启动 `python -m master.main` 与脚本启动 `bash scripts/start.sh master` 时，master 日志文件路径均为 `settings.log_dir`
