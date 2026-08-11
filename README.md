@@ -168,6 +168,7 @@
 │   ├── deploy.sh             # 部署脚本
 │   ├── start.sh              # 启动脚本
 │   ├── stop.sh               # 停止脚本
+│   ├── upgrade.sh            # 升级脚本
 │   └── generate_grpc_code.py # gRPC 代码生成脚本
 │
 ├── tests/                     # 测试目录
@@ -185,6 +186,13 @@
 │   ├── skills/               # 技能配置
 │   └── specs/                # 规格说明
 │
+├── .trae-html-share-packages/ # Trae HTML 共享资源包
+│   └── master/templates/     # Master 模板压缩包（app.html.zip、page.html.zip）
+│
+├── .vscode/                   # VSCode 编辑器配置
+│   └── settings.json         # 工作区设置
+│
+├── .gitignore                # Git 忽略规则
 ├── pyproject.toml            # 项目配置
 ├── uv.lock                   # 依赖锁定文件
 ├── gateway_python_dev_guide.md # 网关开发指南
@@ -1527,3 +1535,11 @@ python -m pytest tests/ --cov=master --cov=worker
 - 抽检 master/core、master/apps/gateway、master/apps/mcp_server、master/grpc、worker/adapter、worker/scheduler/tasks、worker/transformer/scripts、tests 目录，文档结构与实际文件一致
 - 验证 pyproject.toml 生产依赖与 README.md 依赖列表完全匹配（fastapi 0.111.0、sqlmodel 0.0.19、sqlmodelx 0.0.12、mcp>=1.9.0、confluent-kafka>=2.3.0 等所有版本号一致）
 - 确认自上次提交（f3de3b5, 2026-08-06）以来工作树无新增提交，无未跟踪文件变更
+
+## 更新于 2026-08-11
+
+- 新增提交 ec99f90（2026-08-11）：chore: pre-termination backup，项目全量快照备份提交，包含完整 master/worker 代码、静态资源、测试套件、配置与文档
+- 变更分析：目录结构补齐，补充 scripts/upgrade.sh（升级脚本）、新增 .trae-html-share-packages/（Trae HTML 共享资源包，含 master 模板压缩包）、.vscode/（VSCode 工作区配置）、.gitignore（Git 忽略规则）四项根目录条目
+- 更新目录结构章节：scripts 目录新增 upgrade.sh 升级脚本说明；补充 .trae-html-share-packages/master/templates/ 路径说明（app.html.zip、page.html.zip）；补充 .vscode/settings.json 与 .gitignore 根目录文件说明
+- 验证 README.md 文档与实际代码一致性，抽检 master/apps/gateway/controllers（6个交易所控制器）、master/apps/gateway/core（5个核心子模块）、worker/adapter（7个适配器）、worker/scheduler/tasks（4个任务）、worker/transformer/scripts（5个转换脚本）目录，文档结构与实际文件完全匹配
+- 工作区存在未提交变更：.trae-html-share-packages/master/templates/app.html.zip、page.html.zip（二进制文件，文件大小未变，仅时间戳更新），一并纳入本次提交
