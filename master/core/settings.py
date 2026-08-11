@@ -34,7 +34,7 @@ class Settings(admin.Settings):
     amis_theme: Literal["cxd", "antd", "dark", "ang"] = "cxd"
     static_dir: str = os.path.join(MASTER_DIR, "static")
     # 日志配置
-    log_level: str = "DEBUG"
+    log_level: str = "INFO"
     log_dir: str = os.path.join(MASTER_DIR, "log", "uvicorn.log")
     error_log_dir: str = os.path.join(MASTER_DIR, "log", "uvicorn-error.log")
     log_format: str = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'

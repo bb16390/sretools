@@ -1,7 +1,8 @@
 import os
 import logging
+import logging.config
 from logging import FileHandler, LogRecord, WARNING
-from logging.handlers import QueueHandler
+from logging.handlers import QueueHandler, TimedRotatingFileHandler
 from queue import Queue, Empty
 from threading import Thread, Event
 import atexit
@@ -149,28 +150,83 @@ class AsyncFileHandler(QueueHandler):
         return self._processed_count / elapsed
 
 
-def setup_logging(settings) -> None:
-    # 配置日志系统
-    log_dir = os.path.dirname(settings.log_dir)
-    if not os.path.exists(log_dir):
-        os.makedirs(log_dir, exist_ok=True)
 
-    # 创建 FileHandler
-    file_handler = FileHandler(settings.log_dir, encoding='utf-8')
-    file_handler.setLevel(getattr(logging, settings.log_level))
+def get_uvicorn_log_config(settings) -> dict:
+    """返回 uvicorn 的 ``log_config``，统一记录 fastapi 程序的所有日志。
 
-    # 创建 AsyncFileHandler
-    async_file_handler = AsyncFileHandler(file_handler)
+    通过 ``root`` logger 配置 ``AsyncFileHandler``，使业务日志
+    （``master.main``、``aiosqlite`` 等）与 uvicorn 的 access/error 日志
+    都写入 ``settings.log_dir``。``uvicorn.access`` / ``uvicorn.error``
+    保留各自的 ``StreamHandler``（终端输出）并 ``propagate=True``，因此
+    同一条日志会同时落地终端与文件，且每个通道仅写一次。
 
-    # 配置日志格式
-    formatter = logging.Formatter(settings.log_format)
-    file_handler.setFormatter(formatter)
+    访问日志格式在 ``settings.log_format`` 基础上，将 ``%(message)s``
+    替换为 ``%(client_addr)s - "%(request_line)s" %(status_code)s``，
+    由 ``uvicorn.logging.AccessFormatter`` 注入这些字段。
+    """
+    # 用访问日志专用字段替换 %(message)s，保持前缀与业务日志一致
+    if "%(message)s" in settings.log_format:
+        access_fmt = settings.log_format.replace(
+            "%(message)s",
+            '%(client_addr)s - "%(request_line)s" %(status_code)s',
+        )
+    else:
+        access_fmt = (
+            settings.log_format
+            + ' - %(client_addr)s - "%(request_line)s" %(status_code)s'
+        )
 
-    # 添加处理器到根日志器
-    root_logger = logging.getLogger()
-    # 去重：移除已有的 AsyncFileHandler，避免重复堆叠导致日志重复输出
-    for h in list(root_logger.handlers):
-        if isinstance(h, AsyncFileHandler):
-            root_logger.removeHandler(h)
-    root_logger.setLevel(getattr(logging, settings.log_level))
-    root_logger.addHandler(async_file_handler)
+    return {
+        "version": 1,
+        "disable_existing_loggers": False,
+        "formatters": {
+            "default": {
+                "()": "uvicorn.logging.DefaultFormatter",
+                "fmt": settings.log_format,
+                "use_colors": False,
+            },
+            "access": {
+                "()": "uvicorn.logging.AccessFormatter",
+                "fmt": access_fmt,
+                "use_colors": False,
+            },
+        },
+        "handlers": {
+            "default": {
+                "formatter": "default",
+                "class": "logging.StreamHandler",
+                "stream": "ext://sys.stderr",
+            },
+            "access": {
+                "formatter": "access",
+                "class": "logging.StreamHandler",
+                "stream": "ext://sys.stdout",
+            },
+            "file": {
+                "class": "logging.handlers.TimedRotatingFileHandler",
+                "filename": settings.log_dir,
+                "when": "midnight",                 # 每天午夜轮转
+                "interval": 1,                      # 轮转间隔为 1 天
+                "backupCount": 60,                  # 保留最近 30 天的日志文件
+                "encoding": "utf-8",
+                "formatter": "default",
+            },
+        },
+        "root": {
+            "handlers": ["file"],
+            "level": settings.log_level,
+        },
+        "loggers": {
+            "uvicorn.error": {
+                "handlers": ["default"],
+                "level": "INFO",
+                "propagate": True,
+            },
+            "uvicorn.access": {
+                "handlers": ["access"],
+                "level": "INFO",
+                "propagate": True,
+            },
+            "uvicorn.asgi": {"level": "WARNING"},
+        },
+    }

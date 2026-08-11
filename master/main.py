@@ -64,25 +64,23 @@ except OSError:
 # ---------------------------------------------------------------------------
 # 2. 导入内部模块（必须放在 sys.path 调整之后）
 # ---------------------------------------------------------------------------
-from fastapi import FastAPI as FastAPIBase  # noqa: E402
-from fastapi import applications, File, UploadFile, Form  # noqa: E402
-from fastapi.openapi.docs import (  # noqa: E402
+from fastapi import FastAPI as FastAPIBase  
+from fastapi import applications, File, UploadFile, Form  
+from fastapi.openapi.docs import (  
     get_swagger_ui_html,
 )
-from fastapi.staticfiles import StaticFiles  # noqa: E402
-from sqlmodel import SQLModel  # noqa: E402
-from starlette.middleware.cors import CORSMiddleware  # noqa: E402
-from starlette.responses import RedirectResponse  # noqa: E402
+from fastapi.staticfiles import StaticFiles  
+from sqlmodel import SQLModel  
+from starlette.middleware.cors import CORSMiddleware  
+from starlette.responses import RedirectResponse  
 
-from master.index.admin import NavPageAdmin  # noqa: E402
-from master.index.file_upload_admin import FileUploadApp  # noqa: E402
-from master.core.globals import auth, site  # noqa: E402
-from master.core.logging import AsyncFileHandler, setup_logging  # noqa: E402
-from master.core.settings import settings  # noqa: E402
-from fastapi_amis_admin.crud.schema import BaseApiOut  # noqa: E402
+from master.index.admin import NavPageAdmin  
+from master.index.file_upload_admin import FileUploadApp  
+from master.core.globals import auth, site  
+from master.core.logging import get_uvicorn_log_config
+from master.core.settings import settings  
+from fastapi_amis_admin.crud.schema import BaseApiOut  
 
-# 配置日志系统
-setup_logging(settings)
 
 # 日志logger
 logger = logging.getLogger(__name__)
@@ -219,6 +217,7 @@ if __name__ == "__main__":
         port=settings.port,
         access_log=True,
         reload=True,
+        log_config=get_uvicorn_log_config(settings),
     )
     server = uvicorn.Server(config)
 

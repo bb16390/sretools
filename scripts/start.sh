@@ -286,27 +286,17 @@ start_master() {
 
     log_info "Master 监听地址: ${master_host}:${master_port}"
 
-    # 关键：从 PROJECT_ROOT 启动，避免路径冲突
-    local launch_cmd
-    if command -v uv &> /dev/null; then
-        # 进入 MASTER_DIR 运行，因为 master/main.py 中有相对路径
-        launch_cmd="cd '$PROJECT_ROOT' && uv run python -c \"import sys; sys.path.insert(0, '$MASTER_DIR'); from main import app; import uvicorn; uvicorn.run(app, host='${master_host}', port=${master_port}, access_log=False)\""
-    else
-        launch_cmd="cd '$PROJECT_ROOT' && PYTHONPATH='${MASTER_DIR}:${PROJECT_ROOT}' '${python_cmd}' -c \"from main import app; import uvicorn; uvicorn.run(app, host='${master_host}', port=${master_port}, access_log=False)\""
-    fi
-
-    # 实际上直接用 uvicorn module 方式，从正确的目录启动
-    # 但 master/main.py 有自己的相对路径导入，我们直接在 master 目录启动
+    # 通过 python -c 启动 uvicorn，传入与项目日志格式一致的 log_config
+    # 使访问日志格式与 aiosqlite 等业务日志保持一致
     local actual_cmd
     if command -v uv &> /dev/null; then
-        actual_cmd="cd '$MASTER_DIR' && uv run python -m uvicorn main:app --host '${master_host}' --port ${master_port}"
+        actual_cmd="cd '$MASTER_DIR' && uv run python main.py"
     else
-        actual_cmd="cd '$MASTER_DIR' && PYTHONPATH='${MASTER_DIR}:${PROJECT_ROOT}' '${python_cmd}' -m uvicorn main:app --host '${master_host}' --port ${master_port}"
+        actual_cmd="cd '$MASTER_DIR' && PYTHONPATH='${MASTER_DIR}:${PROJECT_ROOT}' '${python_cmd}' main.py"
     fi
 
     MASTER_LOG=$(get_master_log_file)
-    mkdir -p "$(dirname "$MASTER_LOG")"
-    nohup bash -c "$actual_cmd" >> "$MASTER_LOG" 2>&1 &
+    nohup bash -c "$actual_cmd" > /dev/null 2>&1 &
     local pid=$!
     echo "$pid" > "$MASTER_PID_FILE"
     disown "$pid" 2>/dev/null || true
