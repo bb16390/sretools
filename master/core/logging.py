@@ -174,3 +174,12 @@ def setup_logging(settings) -> None:
             root_logger.removeHandler(h)
     root_logger.setLevel(getattr(logging, settings.log_level))
     root_logger.addHandler(async_file_handler)
+
+    # 接管 uvicorn 日志：清除其自带 StreamHandler（stdout/stderr），
+    # 改由 root logger 的 AsyncFileHandler 统一写入，避免 stdout 块缓冲导致 access log 滞留。
+    # 注意：setup_logging 在 app 导入期执行，晚于 uvicorn Config.__init__ 的 dictConfig，故此覆盖最终生效。
+    for _name in ("uvicorn", "uvicorn.error", "uvicorn.access"):
+        _uv_logger = logging.getLogger(_name)
+        _uv_logger.handlers = [h for h in _uv_logger.handlers if isinstance(h, AsyncFileHandler)]
+        _uv_logger.propagate = True
+        _uv_logger.setLevel(getattr(logging, settings.log_level))
