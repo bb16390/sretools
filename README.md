@@ -282,6 +282,17 @@
   - `update_db_pages_parent_and_sort()`: 更新页面排序和父级关系
   - `get_db_active_pages()`: 获取激活的页面列表
 
+##### FileUploadApp 文件上传管理
+- **文件**: [master/index/file_upload_admin.py](file:///workspace/master/index/file_upload_admin.py)
+- **职责**: 提供文件上传管理的后台界面与 HTTP API 接口
+- **关键类**:
+  - `FileUploadApp`: 文件上传管理应用容器（AdminApp），注册到管理后台，标签"文件上传管理"，图标 `fa fa-file`
+  - `FileUploadAdmin`: 文件上传页面管理员（PageAdmin），标签"文件上传"，图标 `fa fa-upload`
+- **功能**:
+  - 上传表单：标题（必填）、描述、文件（单文件，最大 10MB，任意类型）
+  - 提交接口：`POST /api/file-upload/submit`（multipart/form-data）
+  - 提交结果：JSON 展示标题、描述、文件名、Content-Type、文件大小
+
 #### 1.3 网关控制模块 (master/apps/gateway/)
 
 ##### 模块概述
@@ -829,17 +840,23 @@ ruff format .
 | port | 5500 | 监听端口 |
 | debug | True | 调试模式 |
 | version | "0.0.0" | 版本号 |
+| allow_origins | ["*"] | CORS 跨域允许的源列表 |
 | site_title | "SRE Tools" | 站点标题 |
-| site_path | "/admin" | 管理路径 |
 | site_icon | "/static/favicon_b3b0647.png" | 站点图标 |
+| site_url | "" | 站点 URL |
+| site_path | "/admin" | 管理路径 |
+| language | "zh_CN" | 语言设置（zh_CN / en_US） |
 | amis_cdn | "/static" | Amis 资源 CDN/本地静态路径（使用本地静态托管，避免外网 CDN 不可达导致管理后台白屏） |
 | amis_pkg | "amis" | Amis 资源包名 |
-| amis_theme | "cxd" | Amis 主题 |
+| amis_theme | "cxd" | Amis 主题（cxd / antd / dark / ang） |
 | static_dir | master/static | 静态文件目录（挂载至 /static） |
 | template_name | master/templates | 页面模板目录 |
-| database_url_async | SQLite | 异步数据库URL |
+| database_url_async | SQLite | 异步数据库 URL（默认 SQLite + aiosqlite，基于 MASTER_DIR 绝对路径） |
+| database_url | "" | 同步数据库 URL（可留空，异步连接优先） |
 | log_level | "DEBUG" | 日志级别 |
-| log_dir | master/log/uvicorn.log | 日志文件路径 |
+| log_dir | master/log/uvicorn.log | 常规日志文件路径 |
+| error_log_dir | master/log/uvicorn-error.log | 错误日志文件路径 |
+| log_format | '%(asctime)s - %(name)s - %(levelname)s - %(message)s' | 日志格式模板 |
 | secret_key | "your-secret-key-here" | 密钥 |
 | gateway_install_root | master/data/gateways/install | 网关安装根目录 |
 | gateway_backup_root | master/data/gateways/backup | 网关备份根目录 |
@@ -852,7 +869,9 @@ ruff format .
 |--------|--------|------|
 | host | "0.0.0.0" | 监听地址 |
 | port | 5501 | 监听端口 |
-| worker_id | "worker_{pid}" | Worker标识 |
+| debug | True | 调试模式 |
+| version | "0.0.0" | 版本号 |
+| worker_id | "worker_{pid}" | Worker标识（默认附加当前进程ID） |
 | central_servers | ["http://localhost:5500"] | 中心端服务器列表（兼容回退） |
 | central_timeout | 10 | 中心端超时时间（秒） |
 | central_retry_times | 3 | 重试次数 |
@@ -860,6 +879,9 @@ ruff format .
 | grpc_server_address | "localhost:50051" | gRPC 服务器地址（host:port） |
 | grpc_server_addresses | ["localhost:50051"] | gRPC 故障转移候选地址列表 |
 | grpc_only | False | 是否只使用 gRPC（禁用 HTTP 回退） |
+| log_level | "DEBUG" | 日志级别 |
+| log_dir | worker/log/worker.log | 常规日志文件路径 |
+| error_log_dir | worker/log/worker-error.log | 错误日志文件路径 |
 | log_collect_interval | 5 | 日志收集间隔（秒） |
 | log_batch_size | 1000 | 日志批量大小 |
 | log_queue_size | 10000 | 日志队列大小 |
@@ -867,7 +889,9 @@ ruff format .
 | metric_batch_size | 500 | 指标批量大小 |
 | local_storage_path | worker/data | 本地存储路径 |
 | max_local_storage_size | 1024 | 最大存储大小（MB） |
-| secret_key | "your-secret-key-here" | 密钥 |
+| allow_origins | ["*"] | CORS 跨域允许的源列表 |
+| api_key | "" | API Key（预留安全校验字段） |
+| secret_key | "your-secret-key-here" | 密钥（HMAC-SHA256 签名使用） |
 
 ---
 
@@ -996,7 +1020,21 @@ ruff format .
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| POST | /api/file-upload/submit | 文件上传提交 |
+| POST | /api/file-upload/submit | 文件上传提交（multipart/form-data） |
+
+**文件上传接口详细参数**：
+- 请求体（Form 表单字段）：
+  - `title` (string, 必填)：上传文件的标题
+  - `description` (string, 可选)：上传文件的描述
+  - `file` (UploadFile, 可选)：上传的文件（单文件，最大 10MB，任意类型）
+- 响应（BaseApiOut JSON）：
+  - `data.title`：标题
+  - `data.description`：描述
+  - `data.filename`：原始文件名（有文件时）
+  - `data.content_type`：MIME 类型（有文件时）
+  - `data.file_size`：字节数（有文件时）
+  - `msg`："提交成功"
+- **实现位置**: [master/main.py#L181-L197](file:///workspace/master/main.py#L181-L197)
 
 ### gRPC 接口 (Master:50051)
 
@@ -1543,3 +1581,14 @@ python -m pytest tests/ --cov=master --cov=worker
 - 更新目录结构章节：scripts 目录新增 upgrade.sh 升级脚本说明；补充 .trae-html-share-packages/master/templates/ 路径说明（app.html.zip、page.html.zip）；补充 .vscode/settings.json 与 .gitignore 根目录文件说明
 - 验证 README.md 文档与实际代码一致性，抽检 master/apps/gateway/controllers（6个交易所控制器）、master/apps/gateway/core（5个核心子模块）、worker/adapter（7个适配器）、worker/scheduler/tasks（4个任务）、worker/transformer/scripts（5个转换脚本）目录，文档结构与实际文件完全匹配
 - 工作区存在未提交变更：.trae-html-share-packages/master/templates/app.html.zip、page.html.zip（二进制文件，文件大小未变，仅时间戳更新），一并纳入本次提交
+
+## 更新于 2026-08-12
+
+- 今日无新增 git 提交，项目运行正常
+- 文档一致性审计与补全：发现 Master/Worker 配置项、文件上传模块说明存在与实际代码不一致的条目，本次迭代同步修正
+- 页面管理模块补充：新增「FileUploadApp 文件上传管理」小节（1.2），描述 FileUploadApp（AdminApp 容器）与 FileUploadAdmin（PageAdmin 页面）两个类，补充上传表单字段、最大 10MB 限制、/api/file-upload/submit 接口与提交结果 JSON 展示
+- Master 配置表（共 20 项，原为 18 项）补充：allow_origins（CORS 跨域）、site_url（站点 URL）、language（语言 zh_CN/en_US）、database_url（同步 DB URL）、error_log_dir（错误日志路径）、log_format（日志格式模板）六项；修正 amis_theme 可选值说明（cxd/antd/dark/ang）、database_url_async 默认引擎说明（SQLite+aiosqlite 绝对路径）
+- Worker 配置表（共 23 项，原为 19 项）补充：debug、version、log_level、log_dir、error_log_dir 五项日志/基础配置，并新增 allow_origins（CORS）、api_key（预留安全字段）两项；修正 worker_id 附加进程 pid 说明、secret_key 用于 HMAC-SHA256 签名说明
+- API 接口章节补充：文件上传接口标注 multipart/form-data 提交方式，并新增详细参数段落（Form 字段/JSON 响应/实现位置链接），与 master/main.py 中 file_upload_submit 实现保持一致
+- 验证与抽检：对照 master/core/settings.py 与 worker/core/settings.py 逐字段核对配置表，确认无遗漏；对比 master/index/file_upload_admin.py 与 master/main.py#L181-L197 实现，确认接口/字段/限制完全匹配
+- 确认自上次提交（4481c2a, 2026-08-11）以来工作树除本次 README 修订外无新增提交、无未跟踪代码文件变更
