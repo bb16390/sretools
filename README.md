@@ -1601,3 +1601,12 @@ python -m pytest tests/ --cov=master --cov=worker
 - 对照 pyproject.toml 逐行核对 README 生产依赖列表（19项）与开发依赖列表（2项），确认版本号完全一致（fastapi 0.111.0、sqlmodel 0.0.19、sqlmodelx 0.0.12、mcp>=1.9.0、confluent-kafka>=2.3.0、pytest>=9.0.2、ruff>=0.15.5 等均匹配）
 - 工作区存在未提交变更：.trae-html-share-packages/master/templates/app.html.zip、page.html.zip（二进制文件，仅文件时间戳更新，大小无变化），一并纳入本次提交
 - 确认自上次提交（82b420d, 2026-08-12）以来无新增代码提交、无未跟踪代码文件变更
+
+## 更新于 2026-08-14
+
+- 今日无新增 git 提交，项目运行正常
+- 验证 README.md 文档与实际代码一致性，确认所有模块、类、接口描述准确无误
+- 抽检 master/apps/gateway/controllers（8个文件：base + szse/sse/bjse 各 mdgw/tgw 控制器）、worker/adapter（8个文件：base + 6个适配器）、worker/scheduler/tasks（4个任务：log/metric/database/kafka collector）、worker/transformer/scripts（5个转换脚本：聚合/过滤/格式化/JSON解析/指标转换）目录，文档结构与实际文件完全匹配
+- 对照 pyproject.toml 逐行核对 README 生产依赖列表（19项）与开发依赖列表（2项），确认版本号完全一致（fastapi 0.111.0、sqlmodel 0.0.19、sqlmodelx 0.0.12、mcp>=1.9.0、confluent-kafka>=2.3.0、pytest>=9.0.2、ruff>=0.15.5 等均匹配）
+- 工作区存在未提交变更：.trae-html-share-packages/master/templates/app.html.zip、page.html.zip（二进制文件，仅文件时间戳更新，大小无变化），一并纳入本次提交
+- 确认自上次提交（4a67b00, 2026-08-13）以来无新增代码提交、无未跟踪代码文件变更
