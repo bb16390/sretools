@@ -1610,3 +1610,13 @@ python -m pytest tests/ --cov=master --cov=worker
 - 对照 pyproject.toml 逐行核对 README 生产依赖列表（19项）与开发依赖列表（2项），确认版本号完全一致（fastapi 0.111.0、sqlmodel 0.0.19、sqlmodelx 0.0.12、mcp>=1.9.0、confluent-kafka>=2.3.0、pytest>=9.0.2、ruff>=0.15.5 等均匹配）
 - 工作区存在未提交变更：.trae-html-share-packages/master/templates/app.html.zip、page.html.zip（二进制文件，仅文件时间戳更新，大小无变化），一并纳入本次提交
 - 确认自上次提交（4a67b00, 2026-08-13）以来无新增代码提交、无未跟踪代码文件变更
+
+## 更新于 2026-08-15
+
+- 今日无新增 git 提交，项目运行正常
+- 验证 README.md 文档与实际代码一致性，确认所有模块、类、接口描述准确无误
+- 核心类与函数抽检：AsyncFileHandler（master/core/logging.py#L11）、CentralGrpcClient（worker/grpc/client.py#L90）、mcp_http_app（master/apps/mcp_server/__init__.py#L126）、TradeDayCache（worker/scheduler/trade_day_cache.py#L9）均存在且与文档位置匹配
+- 配置项一致性验证：Master 配置中 language="zh_CN"、amis_cdn="/static"、gateway_install_root/gateway_backup_root 路径；Worker 配置中 grpc_enabled=False、grpc_server_address="localhost:50051"、grpc_only=False、log_batch_size=1000，全部与 settings.py 实际值匹配
+- 抽检 master/core、master/apps/gateway、master/apps/mcp_server、master/grpc、master/index、worker/adapter、worker/scheduler、worker/transformer、tests 目录，文档结构与实际文件完全匹配
+- 工作区存在未提交变更：.trae-html-share-packages/master/templates/app.html.zip、page.html.zip（二进制文件，仅文件时间戳更新，大小无变化），一并纳入本次提交
+- 确认自上次提交（b64b544, 2026-08-14）以来无新增代码提交、无未跟踪代码文件变更
