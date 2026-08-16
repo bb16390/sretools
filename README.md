@@ -187,7 +187,10 @@
 │   └── specs/                # 规格说明
 │
 ├── .trae-html-share-packages/ # Trae HTML 共享资源包
-│   └── master/templates/     # Master 模板压缩包（app.html.zip、page.html.zip）
+│   └── master/               # Master 资源
+│       ├── templates/       # Master 模板压缩包（app.html.zip、page.html.zip）
+│       └── libs/            # Master 依赖库模板资源
+│           └── fastapi_amis_admin/amis/templates/  # Amis 模板压缩包（app.html.zip、page.html.zip）
 │
 ├── .vscode/                   # VSCode 编辑器配置
 │   └── settings.json         # 工作区设置
@@ -1314,6 +1317,14 @@ python -m pytest tests/ --cov=master --cov=worker
 如有问题或建议，请提交Issue或Pull Request。
 
 ---
+
+## 更新于 2026-08-16
+
+- 新增合并提交 71de65a（2026-08-16，合并 PR #27）：项目大规模代码初始化提交，325 个文件，106860 行新增代码
+- 初始化内容包括：Master 中心端完整架构（核心模块、网关管理、gRPC 服务端、页面管理、MCP Server、Amis 本地静态资源）、Worker 分布式工作端（适配器层、任务调度器、数据转换层、gRPC 客户端、交易日缓存）、项目脚本（deploy/start/stop/upgrade/gRPC 代码生成）、完整测试套件（日志性能、交易日调度、网关功能、冒烟测试）
+- 工作树新增目录 .trae-html-share-packages/master/libs/fastapi_amis_admin/amis/templates/，补充 Amis 模板压缩包（app.html.zip、page.html.zip），用于 fastapi-amis-admin 库的模板资源共享
+- 更新 README.md 目录结构描述：补充 .trae-html-share-packages 下 master/libs/ 依赖库模板资源路径，与实际文件结构保持一致
+- 验证所有核心模块（master/core、master/apps/gateway、master/apps/mcp_server、master/grpc、worker/adapter、worker/scheduler、worker/transformer、tests）文档描述与实际代码匹配
 
 ## 更新于 2026-08-05
 
