@@ -56,6 +56,15 @@ sys.path[:] = [
 if _normalize(PROJECT_ROOT) not in {_normalize(p) for p in sys.path}:
     sys.path.insert(0, PROJECT_ROOT)
 
+# 3. 将本地化 vendor 库目录 (master/libs/) 提前到 sys.path 首位,
+#    使 `import fastapi_amis_admin` / `import fastapi_user_auth` 解析到
+#    项目内置副本,而不是 site-packages 中的 pip 版本。
+_LIBS_DIR = os.path.join(_MASTER_DIR, "libs")
+if os.path.isdir(_LIBS_DIR) and _normalize(_LIBS_DIR) not in {
+    _normalize(p) for p in sys.path
+}:
+    sys.path.insert(0, _LIBS_DIR)
+
 try:
     os.chdir(PROJECT_ROOT)
 except OSError:
@@ -116,7 +125,12 @@ async def lifespan(app: FastAPI):
     await site.db.async_run_sync(SQLModel.metadata.create_all, is_session=False)
     User = await auth.create_role_user("admin")
     Root = await auth.create_role_user("root")
-    await site.router.startup()
+    # starlette 1.6.0 / fastapi 0.141.0 移除了 APIRouter.startup(),
+    # 且父应用使用自定义 lifespan 时,挂载子应用(site.fastapi)的
+    # on_event("startup") 处理器不会自动触发,故在此手动执行
+    # site.router.on_startup(含 sync_pages、casbin _load_policy 等)。
+    for handler in site.router.on_startup:
+        await handler()
     if not auth.enforcer.enforce("u:admin", site.unique_id, "page", "page"):
         await auth.enforcer.add_policy(
             "u:admin", site.unique_id, "page", "page", "allow"
