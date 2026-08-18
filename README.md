@@ -168,6 +168,7 @@
 │   ├── deploy.sh             # 部署脚本
 │   ├── start.sh              # 启动脚本
 │   ├── stop.sh               # 停止脚本
+│   ├── upgrade.sh            # 升级脚本
 │   └── generate_grpc_code.py # gRPC 代码生成脚本
 │
 ├── tests/                     # 测试目录
@@ -185,6 +186,16 @@
 │   ├── skills/               # 技能配置
 │   └── specs/                # 规格说明
 │
+├── .trae-html-share-packages/ # Trae HTML 共享资源包
+│   └── master/               # Master 资源
+│       ├── templates/       # Master 模板压缩包（app.html.zip、page.html.zip）
+│       └── libs/            # Master 依赖库模板资源
+│           └── fastapi_amis_admin/amis/templates/  # Amis 模板压缩包（app.html.zip、page.html.zip）
+│
+├── .vscode/                   # VSCode 编辑器配置
+│   └── settings.json         # 工作区设置
+│
+├── .gitignore                # Git 忽略规则
 ├── pyproject.toml            # 项目配置
 ├── uv.lock                   # 依赖锁定文件
 ├── gateway_python_dev_guide.md # 网关开发指南
@@ -273,6 +284,17 @@
   - `db_to_site()`: 将数据库页面同步到站点
   - `update_db_pages_parent_and_sort()`: 更新页面排序和父级关系
   - `get_db_active_pages()`: 获取激活的页面列表
+
+##### FileUploadApp 文件上传管理
+- **文件**: [master/index/file_upload_admin.py](file:///workspace/master/index/file_upload_admin.py)
+- **职责**: 提供文件上传管理的后台界面与 HTTP API 接口
+- **关键类**:
+  - `FileUploadApp`: 文件上传管理应用容器（AdminApp），注册到管理后台，标签"文件上传管理"，图标 `fa fa-file`
+  - `FileUploadAdmin`: 文件上传页面管理员（PageAdmin），标签"文件上传"，图标 `fa fa-upload`
+- **功能**:
+  - 上传表单：标题（必填）、描述、文件（单文件，最大 10MB，任意类型）
+  - 提交接口：`POST /api/file-upload/submit`（multipart/form-data）
+  - 提交结果：JSON 展示标题、描述、文件名、Content-Type、文件大小
 
 #### 1.3 网关控制模块 (master/apps/gateway/)
 
@@ -821,17 +843,23 @@ ruff format .
 | port | 5500 | 监听端口 |
 | debug | True | 调试模式 |
 | version | "0.0.0" | 版本号 |
+| allow_origins | ["*"] | CORS 跨域允许的源列表 |
 | site_title | "SRE Tools" | 站点标题 |
-| site_path | "/admin" | 管理路径 |
 | site_icon | "/static/favicon_b3b0647.png" | 站点图标 |
+| site_url | "" | 站点 URL |
+| site_path | "/admin" | 管理路径 |
+| language | "zh_CN" | 语言设置（zh_CN / en_US） |
 | amis_cdn | "/static" | Amis 资源 CDN/本地静态路径（使用本地静态托管，避免外网 CDN 不可达导致管理后台白屏） |
 | amis_pkg | "amis" | Amis 资源包名 |
-| amis_theme | "cxd" | Amis 主题 |
+| amis_theme | "cxd" | Amis 主题（cxd / antd / dark / ang） |
 | static_dir | master/static | 静态文件目录（挂载至 /static） |
 | template_name | master/templates | 页面模板目录 |
-| database_url_async | SQLite | 异步数据库URL |
+| database_url_async | SQLite | 异步数据库 URL（默认 SQLite + aiosqlite，基于 MASTER_DIR 绝对路径） |
+| database_url | "" | 同步数据库 URL（可留空，异步连接优先） |
 | log_level | "DEBUG" | 日志级别 |
-| log_dir | master/log/uvicorn.log | 日志文件路径 |
+| log_dir | master/log/uvicorn.log | 常规日志文件路径 |
+| error_log_dir | master/log/uvicorn-error.log | 错误日志文件路径 |
+| log_format | '%(asctime)s - %(name)s - %(levelname)s - %(message)s' | 日志格式模板 |
 | secret_key | "your-secret-key-here" | 密钥 |
 | gateway_install_root | master/data/gateways/install | 网关安装根目录 |
 | gateway_backup_root | master/data/gateways/backup | 网关备份根目录 |
@@ -844,7 +872,9 @@ ruff format .
 |--------|--------|------|
 | host | "0.0.0.0" | 监听地址 |
 | port | 5501 | 监听端口 |
-| worker_id | "worker_{pid}" | Worker标识 |
+| debug | True | 调试模式 |
+| version | "0.0.0" | 版本号 |
+| worker_id | "worker_{pid}" | Worker标识（默认附加当前进程ID） |
 | central_servers | ["http://localhost:5500"] | 中心端服务器列表（兼容回退） |
 | central_timeout | 10 | 中心端超时时间（秒） |
 | central_retry_times | 3 | 重试次数 |
@@ -852,6 +882,9 @@ ruff format .
 | grpc_server_address | "localhost:50051" | gRPC 服务器地址（host:port） |
 | grpc_server_addresses | ["localhost:50051"] | gRPC 故障转移候选地址列表 |
 | grpc_only | False | 是否只使用 gRPC（禁用 HTTP 回退） |
+| log_level | "DEBUG" | 日志级别 |
+| log_dir | worker/log/worker.log | 常规日志文件路径 |
+| error_log_dir | worker/log/worker-error.log | 错误日志文件路径 |
 | log_collect_interval | 5 | 日志收集间隔（秒） |
 | log_batch_size | 1000 | 日志批量大小 |
 | log_queue_size | 10000 | 日志队列大小 |
@@ -859,7 +892,9 @@ ruff format .
 | metric_batch_size | 500 | 指标批量大小 |
 | local_storage_path | worker/data | 本地存储路径 |
 | max_local_storage_size | 1024 | 最大存储大小（MB） |
-| secret_key | "your-secret-key-here" | 密钥 |
+| allow_origins | ["*"] | CORS 跨域允许的源列表 |
+| api_key | "" | API Key（预留安全校验字段） |
+| secret_key | "your-secret-key-here" | 密钥（HMAC-SHA256 签名使用） |
 
 ---
 
@@ -988,7 +1023,21 @@ ruff format .
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| POST | /api/file-upload/submit | 文件上传提交 |
+| POST | /api/file-upload/submit | 文件上传提交（multipart/form-data） |
+
+**文件上传接口详细参数**：
+- 请求体（Form 表单字段）：
+  - `title` (string, 必填)：上传文件的标题
+  - `description` (string, 可选)：上传文件的描述
+  - `file` (UploadFile, 可选)：上传的文件（单文件，最大 10MB，任意类型）
+- 响应（BaseApiOut JSON）：
+  - `data.title`：标题
+  - `data.description`：描述
+  - `data.filename`：原始文件名（有文件时）
+  - `data.content_type`：MIME 类型（有文件时）
+  - `data.file_size`：字节数（有文件时）
+  - `msg`："提交成功"
+- **实现位置**: [master/main.py#L181-L197](file:///workspace/master/main.py#L181-L197)
 
 ### gRPC 接口 (Master:50051)
 
@@ -1269,6 +1318,14 @@ python -m pytest tests/ --cov=master --cov=worker
 
 ---
 
+## 更新于 2026-08-16
+
+- 新增合并提交 71de65a（2026-08-16，合并 PR #27）：项目大规模代码初始化提交，325 个文件，106860 行新增代码
+- 初始化内容包括：Master 中心端完整架构（核心模块、网关管理、gRPC 服务端、页面管理、MCP Server、Amis 本地静态资源）、Worker 分布式工作端（适配器层、任务调度器、数据转换层、gRPC 客户端、交易日缓存）、项目脚本（deploy/start/stop/upgrade/gRPC 代码生成）、完整测试套件（日志性能、交易日调度、网关功能、冒烟测试）
+- 工作树新增目录 .trae-html-share-packages/master/libs/fastapi_amis_admin/amis/templates/，补充 Amis 模板压缩包（app.html.zip、page.html.zip），用于 fastapi-amis-admin 库的模板资源共享
+- 更新 README.md 目录结构描述：补充 .trae-html-share-packages 下 master/libs/ 依赖库模板资源路径，与实际文件结构保持一致
+- 验证所有核心模块（master/core、master/apps/gateway、master/apps/mcp_server、master/grpc、worker/adapter、worker/scheduler、worker/transformer、tests）文档描述与实际代码匹配
+
 ## 更新于 2026-08-05
 
 - 今日无代码变更，项目运行正常
@@ -1527,3 +1584,50 @@ python -m pytest tests/ --cov=master --cov=worker
 - 抽检 master/core、master/apps/gateway、master/apps/mcp_server、master/grpc、worker/adapter、worker/scheduler/tasks、worker/transformer/scripts、tests 目录，文档结构与实际文件一致
 - 验证 pyproject.toml 生产依赖与 README.md 依赖列表完全匹配（fastapi 0.111.0、sqlmodel 0.0.19、sqlmodelx 0.0.12、mcp>=1.9.0、confluent-kafka>=2.3.0 等所有版本号一致）
 - 确认自上次提交（f3de3b5, 2026-08-06）以来工作树无新增提交，无未跟踪文件变更
+
+## 更新于 2026-08-11
+
+- 新增提交 ec99f90（2026-08-11）：chore: pre-termination backup，项目全量快照备份提交，包含完整 master/worker 代码、静态资源、测试套件、配置与文档
+- 变更分析：目录结构补齐，补充 scripts/upgrade.sh（升级脚本）、新增 .trae-html-share-packages/（Trae HTML 共享资源包，含 master 模板压缩包）、.vscode/（VSCode 工作区配置）、.gitignore（Git 忽略规则）四项根目录条目
+- 更新目录结构章节：scripts 目录新增 upgrade.sh 升级脚本说明；补充 .trae-html-share-packages/master/templates/ 路径说明（app.html.zip、page.html.zip）；补充 .vscode/settings.json 与 .gitignore 根目录文件说明
+- 验证 README.md 文档与实际代码一致性，抽检 master/apps/gateway/controllers（6个交易所控制器）、master/apps/gateway/core（5个核心子模块）、worker/adapter（7个适配器）、worker/scheduler/tasks（4个任务）、worker/transformer/scripts（5个转换脚本）目录，文档结构与实际文件完全匹配
+- 工作区存在未提交变更：.trae-html-share-packages/master/templates/app.html.zip、page.html.zip（二进制文件，文件大小未变，仅时间戳更新），一并纳入本次提交
+
+## 更新于 2026-08-12
+
+- 今日无新增 git 提交，项目运行正常
+- 文档一致性审计与补全：发现 Master/Worker 配置项、文件上传模块说明存在与实际代码不一致的条目，本次迭代同步修正
+- 页面管理模块补充：新增「FileUploadApp 文件上传管理」小节（1.2），描述 FileUploadApp（AdminApp 容器）与 FileUploadAdmin（PageAdmin 页面）两个类，补充上传表单字段、最大 10MB 限制、/api/file-upload/submit 接口与提交结果 JSON 展示
+- Master 配置表（共 20 项，原为 18 项）补充：allow_origins（CORS 跨域）、site_url（站点 URL）、language（语言 zh_CN/en_US）、database_url（同步 DB URL）、error_log_dir（错误日志路径）、log_format（日志格式模板）六项；修正 amis_theme 可选值说明（cxd/antd/dark/ang）、database_url_async 默认引擎说明（SQLite+aiosqlite 绝对路径）
+- Worker 配置表（共 23 项，原为 19 项）补充：debug、version、log_level、log_dir、error_log_dir 五项日志/基础配置，并新增 allow_origins（CORS）、api_key（预留安全字段）两项；修正 worker_id 附加进程 pid 说明、secret_key 用于 HMAC-SHA256 签名说明
+- API 接口章节补充：文件上传接口标注 multipart/form-data 提交方式，并新增详细参数段落（Form 字段/JSON 响应/实现位置链接），与 master/main.py 中 file_upload_submit 实现保持一致
+- 验证与抽检：对照 master/core/settings.py 与 worker/core/settings.py 逐字段核对配置表，确认无遗漏；对比 master/index/file_upload_admin.py 与 master/main.py#L181-L197 实现，确认接口/字段/限制完全匹配
+- 确认自上次提交（4481c2a, 2026-08-11）以来工作树除本次 README 修订外无新增提交、无未跟踪代码文件变更
+
+## 更新于 2026-08-13
+
+- 今日无新增 git 提交，项目运行正常
+- 验证 README.md 文档与实际代码一致性，确认所有模块、类、接口描述准确无误
+- 抽检 master/apps/gateway/controllers（8个文件：base + szse/sse/bjse 各 mdgw/tgw 控制器）、worker/adapter（8个文件：base + 6个适配器）、worker/scheduler/tasks（4个任务：log/metric/database/kafka collector）、worker/transformer/scripts（5个转换脚本：聚合/过滤/格式化/JSON解析/指标转换）目录，文档结构与实际文件完全匹配
+- 对照 pyproject.toml 逐行核对 README 生产依赖列表（19项）与开发依赖列表（2项），确认版本号完全一致（fastapi 0.111.0、sqlmodel 0.0.19、sqlmodelx 0.0.12、mcp>=1.9.0、confluent-kafka>=2.3.0、pytest>=9.0.2、ruff>=0.15.5 等均匹配）
+- 工作区存在未提交变更：.trae-html-share-packages/master/templates/app.html.zip、page.html.zip（二进制文件，仅文件时间戳更新，大小无变化），一并纳入本次提交
+- 确认自上次提交（82b420d, 2026-08-12）以来无新增代码提交、无未跟踪代码文件变更
+
+## 更新于 2026-08-14
+
+- 今日无新增 git 提交，项目运行正常
+- 验证 README.md 文档与实际代码一致性，确认所有模块、类、接口描述准确无误
+- 抽检 master/apps/gateway/controllers（8个文件：base + szse/sse/bjse 各 mdgw/tgw 控制器）、worker/adapter（8个文件：base + 6个适配器）、worker/scheduler/tasks（4个任务：log/metric/database/kafka collector）、worker/transformer/scripts（5个转换脚本：聚合/过滤/格式化/JSON解析/指标转换）目录，文档结构与实际文件完全匹配
+- 对照 pyproject.toml 逐行核对 README 生产依赖列表（19项）与开发依赖列表（2项），确认版本号完全一致（fastapi 0.111.0、sqlmodel 0.0.19、sqlmodelx 0.0.12、mcp>=1.9.0、confluent-kafka>=2.3.0、pytest>=9.0.2、ruff>=0.15.5 等均匹配）
+- 工作区存在未提交变更：.trae-html-share-packages/master/templates/app.html.zip、page.html.zip（二进制文件，仅文件时间戳更新，大小无变化），一并纳入本次提交
+- 确认自上次提交（4a67b00, 2026-08-13）以来无新增代码提交、无未跟踪代码文件变更
+
+## 更新于 2026-08-15
+
+- 今日无新增 git 提交，项目运行正常
+- 验证 README.md 文档与实际代码一致性，确认所有模块、类、接口描述准确无误
+- 核心类与函数抽检：AsyncFileHandler（master/core/logging.py#L11）、CentralGrpcClient（worker/grpc/client.py#L90）、mcp_http_app（master/apps/mcp_server/__init__.py#L126）、TradeDayCache（worker/scheduler/trade_day_cache.py#L9）均存在且与文档位置匹配
+- 配置项一致性验证：Master 配置中 language="zh_CN"、amis_cdn="/static"、gateway_install_root/gateway_backup_root 路径；Worker 配置中 grpc_enabled=False、grpc_server_address="localhost:50051"、grpc_only=False、log_batch_size=1000，全部与 settings.py 实际值匹配
+- 抽检 master/core、master/apps/gateway、master/apps/mcp_server、master/grpc、master/index、worker/adapter、worker/scheduler、worker/transformer、tests 目录，文档结构与实际文件完全匹配
+- 工作区存在未提交变更：.trae-html-share-packages/master/templates/app.html.zip、page.html.zip（二进制文件，仅文件时间戳更新，大小无变化），一并纳入本次提交
+- 确认自上次提交（b64b544, 2026-08-14）以来无新增代码提交、无未跟踪代码文件变更

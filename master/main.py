@@ -56,6 +56,15 @@ sys.path[:] = [
 if _normalize(PROJECT_ROOT) not in {_normalize(p) for p in sys.path}:
     sys.path.insert(0, PROJECT_ROOT)
 
+# 3. 将本地化 vendor 库目录 (master/libs/) 提前到 sys.path 首位,
+#    使 `import fastapi_amis_admin` / `import fastapi_user_auth` 解析到
+#    项目内置副本,而不是 site-packages 中的 pip 版本。
+_LIBS_DIR = os.path.join(_MASTER_DIR, "libs")
+if os.path.isdir(_LIBS_DIR) and _normalize(_LIBS_DIR) not in {
+    _normalize(p) for p in sys.path
+}:
+    sys.path.insert(0, _LIBS_DIR)
+
 try:
     os.chdir(PROJECT_ROOT)
 except OSError:
@@ -114,7 +123,12 @@ async def lifespan(app: FastAPI):
     await site.db.async_run_sync(SQLModel.metadata.create_all, is_session=False)
     User = await auth.create_role_user("admin")
     Root = await auth.create_role_user("root")
-    await site.router.startup()
+    # starlette 1.6.0 / fastapi 0.141.0 移除了 APIRouter.startup(),
+    # 且父应用使用自定义 lifespan 时,挂载子应用(site.fastapi)的
+    # on_event("startup") 处理器不会自动触发,故在此手动执行
+    # site.router.on_startup(含 sync_pages、casbin _load_policy 等)。
+    for handler in site.router.on_startup:
+        await handler()
     if not auth.enforcer.enforce("u:admin", site.unique_id, "page", "page"):
         await auth.enforcer.add_policy(
             "u:admin", site.unique_id, "page", "page", "allow"
@@ -134,9 +148,41 @@ async def lifespan(app: FastAPI):
         logger.info("gRPC 服务模块不可用，跳过启动")
     except Exception as e:
             logger.error(f"启动 gRPC 服务失败: {e}")
-    
+
+    # ----- 采集模块 (apscheduler) 初始化 -----
+    try:
+        from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+        from master.apps.collector.core.scheduler import CollectorScheduler
+        from master.apps.collector.admin import set_collector_scheduler
+        from master.apps.collector.api import setup_collector_module
+
+        # 构造 session_factory（复用 site.db 内部的 async engine）
+        sess_factory = async_sessionmaker(
+            site.db._async_engine,
+            class_=AsyncSession,
+            expire_on_commit=False,
+        )
+        collector_scheduler = CollectorScheduler(sess_factory)
+        scheduled_count = await collector_scheduler.bootstrap()
+        set_collector_scheduler(collector_scheduler)
+        setup_collector_module(sess_factory, collector_scheduler)
+        logger.info(f"采集调度器初始化完成，已加载 {scheduled_count} 个启用的任务")
+
+        # 停机回调
+        app.state._collector_scheduler = collector_scheduler
+    except Exception as e:  # noqa: BLE001
+        logger.exception(f"采集调度器初始化失败: {e}")
+
     logger.info("应用启动完成")
     yield
+    # ----- 优雅停机 -----
+    try:
+        sch = getattr(app.state, "_collector_scheduler", None)
+        if sch is not None:
+            sch.shutdown(wait=False)
+            logger.info("采集调度器已停止")
+    except Exception as e:  # noqa: BLE001
+        logger.error(f"采集调度器停机失败: {e}")
     logger.info("优雅停机")
 
 
@@ -158,8 +204,24 @@ site.register_admin(NavPageAdmin)
 
 site.register_admin(FileUploadApp)
 
+# 注册采集模块管理页
+try:
+    from master.apps.collector.admin import CollectorAdminApp
+    site.register_admin(CollectorAdminApp)
+    logger.info("采集模块管理页已注册")
+except Exception as e:  # noqa: BLE001
+    logger.exception(f"采集模块管理页注册失败: {e}")
+
 # 挂载后台管理系统
 site.mount_app(app)
+
+# 挂载采集模块 HTTP API
+try:
+    from master.apps.collector.api import router as collector_router
+    app.include_router(collector_router)
+    logger.info("采集模块 API 已挂载至 /api/collector")
+except Exception as e:  # noqa: BLE001
+    logger.exception(f"采集模块 API 挂载失败: {e}")
 
 # 挂载网关 HTTP API
 # if GATEWAY_AVAILABLE and gateway_router is not None:
