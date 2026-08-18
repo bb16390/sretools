@@ -203,7 +203,7 @@ class BaseAuthFieldModelAdmin(ModelAdmin):
         """Parse the database data query result dictionary into schema_list."""
         exclude = await self.get_deny_fields(request, "list")  # 过滤没有权限的字段
         data = await super().on_list_after(request, result, data, **kwargs)
-        data.items = [item.dict(exclude=exclude) for item in data.items]  # 过滤没有权限的字段
+        data.items = [item.model_dump(exclude=exclude) for item in data.items]  # 过滤没有权限的字段
         return data
 
     async def on_filter_pre(self, request: Request, obj: Optional[SchemaFilterT], **kwargs) -> Dict[str, Any]:
@@ -216,7 +216,10 @@ class BaseAuthFieldModelAdmin(ModelAdmin):
     async def create_items(self, request: Request, items: List[SchemaCreateT]) -> List[TableModelT]:
         """Create multiple data"""
         exclude = await self.get_deny_fields(request, "create")
-        items = [item.copy(exclude=exclude) for item in items]  # 过滤没有权限的字段
+        # pydantic v2: `model_copy` no longer supports `exclude`. Reconstruct the
+        # instance from a filtered dump so denied fields fall back to defaults and
+        # are not reported as explicitly set (matches v1 `copy(exclude=...)`).
+        items = [type(item).model_construct(**item.model_dump(exclude=exclude)) for item in items]  # 过滤没有权限的字段
         items = await super().create_items(request, items)
         return items
 
@@ -224,7 +227,7 @@ class BaseAuthFieldModelAdmin(ModelAdmin):
         """Read multiple data"""
         items = await super().read_items(request, item_id)
         exclude = await self.get_deny_fields(request, "read")  # 过滤没有权限的字段
-        return [item.copy(exclude=exclude) for item in items]
+        return [type(item).model_construct(**item.model_dump(exclude=exclude)) for item in items]
 
     async def on_update_pre(
         self,
@@ -234,7 +237,7 @@ class BaseAuthFieldModelAdmin(ModelAdmin):
         **kwargs,
     ) -> Dict[str, Any]:
         exclude = await self.get_deny_fields(request, "update")  # 过滤没有权限的字段
-        obj = obj.copy(exclude=exclude)  # 过滤没有权限的字段
+        obj = type(obj).model_construct(**obj.model_dump(exclude=exclude))  # 过滤没有权限的字段
         data = await super().on_update_pre(request, obj, item_id, **kwargs)
         return data
 

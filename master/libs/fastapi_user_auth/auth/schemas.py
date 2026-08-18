@@ -1,9 +1,8 @@
 from enum import Enum
 from typing import Optional
 
-from fastapi_amis_admin.utils.pydantic import PYDANTIC_V2
 from fastapi_amis_admin.utils.translation import i18n as _
-from pydantic import BaseModel, SecretStr
+from pydantic import BaseModel, SecretStr, model_validator
 from sqlmodel import Field
 
 from .models import BaseUser, EmailMixin, PasswordMixin, UsernameMixin
@@ -27,23 +26,11 @@ class UserRegIn(UsernameMixin, PasswordMixin, EmailMixin):
 
     password2: str = Field(title=_("Confirm Password"), max_length=128)
 
-    if PYDANTIC_V2:
-        from pydantic import model_validator
-
-        @model_validator(mode="after")
-        def check_passwords_match(self):
-            if self.password is not None and self.password.get_secret_value() != self.password2:
-                raise ValueError("passwords do not match!")
-            return self
-
-    else:
-        from pydantic import validator
-
-        @validator("password2")
-        def passwords_match_(cls, v, values, **kwargs):
-            if "password" in values and v != values["password"]:
-                raise ValueError("passwords do not match!")
-            return v
+    @model_validator(mode="after")
+    def check_passwords_match(self):
+        if self.password is not None and self.password.get_secret_value() != self.password2:
+            raise ValueError("passwords do not match!")
+        return self
 
 
 # 默认保留的用户

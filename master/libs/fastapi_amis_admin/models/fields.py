@@ -1,18 +1,13 @@
 from typing import AbstractSet, Any, Callable, Dict, List, Literal, Mapping, Optional, Sequence, Type, Union
 
+from pydantic.fields import AliasChoices, AliasPath
 from sqlalchemy import Column
 from sqlmodel._compat import Undefined, UndefinedType, post_init_field_info
 from sqlmodel.main import FieldInfo, NoArgAnyCallable
 
 from fastapi_amis_admin.amis import FormItem, TableColumn
-from fastapi_amis_admin.utils.pydantic import PYDANTIC_V2
 
-if PYDANTIC_V2:
-    from pydantic.fields import AliasChoices, AliasPath
-
-    ValidationAliasT = Union[str, AliasPath, AliasChoices, None]
-else:
-    ValidationAliasT = Optional[str]
+ValidationAliasT = Union[str, AliasPath, AliasChoices, None]
 
 
 def Field(
@@ -74,22 +69,21 @@ def Field(
         current_schema_extra["amis_filter_item"] = amis_filter_item
     if amis_table_column:
         current_schema_extra["amis_table_column"] = amis_table_column
-    if PYDANTIC_V2:
-        current_schema_extra = {
-            "json_schema_extra": current_schema_extra,
-            "alias_priority": alias_priority,
-            "validation_alias": validation_alias,
-            "serialization_alias": serialization_alias,
-            "examples": examples,
-            "init_var": init_var,
-            "kw_only": kw_only,
-            "pattern": pattern,
-            "strict": strict,
-            "allow_inf_nan": allow_inf_nan,
-            "union_mode": union_mode,
-            "frozen": frozen,
-            "validate_default": validate_default,
-        }
+    current_schema_extra = {
+        "json_schema_extra": current_schema_extra,
+        "alias_priority": alias_priority,
+        "validation_alias": validation_alias,
+        "serialization_alias": serialization_alias,
+        "examples": examples,
+        "init_var": init_var,
+        "kw_only": kw_only,
+        "pattern": pattern,
+        "strict": strict,
+        "allow_inf_nan": allow_inf_nan,
+        "union_mode": union_mode,
+        "frozen": frozen,
+        "validate_default": validate_default,
+    }
     field_info = FieldInfo(
         default,
         default_factory=default_factory,

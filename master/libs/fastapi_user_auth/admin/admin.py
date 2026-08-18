@@ -160,9 +160,9 @@ class UserRegFormAdmin(FormAdmin):
         user = await auth.db.async_scalar(select(self.user_model).where(self.user_model.email == data.email))
         if user:
             return BaseApiOut(status=-2, msg=_("Email has been registered!"), data=None)
-        values = data.dict(exclude={"id", "password"})
+        values = data.model_dump(exclude={"id", "password"})
         values["password"] = auth.pwd_context.hash(data.password.get_secret_value())  # 密码hash保存
-        user = self.user_model.parse_obj(values)
+        user = self.user_model.model_validate(values)
         try:
             auth.db.add(user)
             await auth.db.async_flush()
@@ -172,8 +172,8 @@ class UserRegFormAdmin(FormAdmin):
                 detail=f"Error Execute SQL：{e}",
             ) from e
         # 注册成功,设置用户信息
-        token_info = self.schema_submit_out.parse_obj(user)
-        token_info.access_token = await auth.backend.token_store.write_token(user.dict())
+        token_info = self.schema_submit_out.model_validate(user)
+        token_info.access_token = await auth.backend.token_store.write_token(user.model_dump())
         return BaseApiOut(code=0, msg=_("Registered successfully!"), data=token_info)
 
     @property
@@ -233,7 +233,7 @@ class UserInfoFormAdmin(FormAdmin):
     page_route_kwargs = {"name": "userinfo"}
 
     async def get_init_data(self, request: Request, **kwargs) -> BaseApiOut[Any]:
-        return BaseApiOut(data=request.user.dict(exclude={"password"}))
+        return BaseApiOut(data=request.user.model_dump(exclude={"password"}))
 
     async def get_form(self, request: Request) -> Form:
         form = await super().get_form(request)
@@ -246,13 +246,13 @@ class UserInfoFormAdmin(FormAdmin):
         return form
 
     async def handle(self, request: Request, data: SchemaUpdateT, **kwargs) -> BaseApiOut[Any]:
-        for k, v in data.dict(exclude_none=True).items():
+        for k, v in data.model_dump(exclude_none=True).items():
             if k == "password":
                 if not v:
                     continue
                 v = request.auth.get_password_hash(v)
             setattr(request.user, k, v)
-        return BaseApiOut(data=request.user.dict(exclude={"password"}))
+        return BaseApiOut(data=request.user.model_dump(exclude={"password"}))
 
     async def has_page_permission(self, request: Request, obj: PageSchemaAdmin = None, action: str = None) -> bool:
         return await self.site.auth.requires(response=False)(request)

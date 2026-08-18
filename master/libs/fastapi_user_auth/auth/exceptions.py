@@ -58,7 +58,7 @@ class ApiError(ApiException):
         self.extra = extra
         super().__init__(
             detail=msg,
-            content=BaseApiOut(status=status, msg=msg, **extra).dict(),
+            content=BaseApiOut(status=status, msg=msg, **extra).model_dump(),
             headers=headers,
         )
 

@@ -291,7 +291,7 @@ class Auth(Generic[UserModelT]):
 
     async def request_login(self, request: Request, response: Response, username: str, password: str) -> BaseApiOut[UserLoginOut]:
         if request.scope.get("user"):
-            return BaseApiOut(code=1, msg=_("User logged in!"), data=UserLoginOut.parse_obj(request.user))
+            return BaseApiOut(code=1, msg=_("User logged in!"), data=UserLoginOut.model_validate(request.user))
         user = await request.auth.authenticate_user(username=username, password=password)
         # 保存登录记录
         ip = request.client.host  # 获取真实ip
@@ -314,8 +314,8 @@ class Auth(Generic[UserModelT]):
             history.login_status = _("User is not activated")  # 用户未激活
             return BaseApiOut(status=-2, msg=_("Inactive user status!"))
         request.scope["user"] = user
-        token_info = UserLoginOut.parse_obj(request.user)
-        token_info.access_token = await request.auth.backend.token_store.write_token(request.user.dict())
+        token_info = UserLoginOut.model_validate(request.user)
+        token_info.access_token = await request.auth.backend.token_store.write_token(request.user.model_dump())
         response.set_cookie("Authorization", f"bearer {token_info.access_token}")
         return BaseApiOut(code=0, data=token_info)
 

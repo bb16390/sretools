@@ -130,7 +130,7 @@ class Adapter(AsyncAdapter, AsyncUpdateAdapter):
                 continue
             for ptype, ast in model.model[sec].items():
                 for rule in ast.policy:
-                    values.append(self.parse_rule(ptype, rule).dict())
+                    values.append(self.parse_rule(ptype, rule).model_dump())
         if values:
             await self.db.async_execute(insert(self._db_class).values(values))
         await self.db.async_commit()
@@ -146,7 +146,7 @@ class Adapter(AsyncAdapter, AsyncUpdateAdapter):
         """adds a policy rules to the storage."""
         values = []
         for rule in rules:
-            values.append(self.parse_rule(ptype, rule).dict())
+            values.append(self.parse_rule(ptype, rule).model_dump())
         if not values:
             return
         await self.db.async_execute(insert(self._db_class).values(values))

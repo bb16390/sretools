@@ -417,10 +417,10 @@ class PageSchema(AmisNode):
                 body = App(pages=[PageSchema(children=self.children)])
             elif self.tabsMode == TabsModeEnum.collapse:
                 body = (
-                    CollapseGroup.parse_obj(self.dict(exclude=exclude, exclude_defaults=True))
+                    CollapseGroup.model_validate(self.model_dump(exclude=exclude, exclude_defaults=True))
                     .update_from_kwargs(
                         body=[
-                            CollapseGroup.CollapseItem.parse_obj(item.dict(exclude=exclude, exclude_defaults=True))
+                            CollapseGroup.CollapseItem.model_validate(item.model_dump(exclude=exclude, exclude_defaults=True))
                             .update_from_kwargs(
                                 header=item.label,
                                 body=item.as_page_body(group_extra, item_extra),
@@ -433,11 +433,11 @@ class PageSchema(AmisNode):
                 )
             else:
                 body = (
-                    Tabs.parse_obj(self.dict(exclude=exclude, exclude_defaults=True))
+                    Tabs.model_validate(self.model_dump(exclude=exclude, exclude_defaults=True))
                     .update_from_kwargs(
                         mountOnEnter=True,
                         tabs=[
-                            Tabs.Item.parse_obj(item.dict(exclude=exclude, exclude_defaults=True))
+                            Tabs.Item.model_validate(item.model_dump(exclude=exclude, exclude_defaults=True))
                             .update_from_kwargs(
                                 title=item.label,
                                 tab=item.as_page_body(group_extra, item_extra),
@@ -2904,12 +2904,12 @@ class AmisRender(AmisNode):
     props: Optional[dict] = None  # amis props
 
 
-PageSchema.update_forward_refs()
-ActionType.Dialog.update_forward_refs()
-ActionType.Drawer.update_forward_refs()
-TableCRUD.update_forward_refs()
-Form.update_forward_refs()
-Tpl.update_forward_refs()
-InputText.update_forward_refs()
-InputNumber.update_forward_refs()
-Picker.update_forward_refs()
+PageSchema.model_rebuild()
+ActionType.Dialog.model_rebuild()
+ActionType.Drawer.model_rebuild()
+TableCRUD.model_rebuild()
+Form.model_rebuild()
+Tpl.model_rebuild()
+InputText.model_rebuild()
+InputNumber.model_rebuild()
+Picker.model_rebuild()

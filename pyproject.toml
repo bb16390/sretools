@@ -37,9 +37,10 @@ dependencies = [
 ]
 
 
-[tool.ruff.format]
+[tool.ruff]
 line-length = 88
-tab-width = 4
+
+[tool.ruff.format]
 indent-style = "space"
 
 [tool.ruff.lint]
