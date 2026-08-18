@@ -150,9 +150,41 @@ async def lifespan(app: FastAPI):
         logger.info("gRPC 服务模块不可用，跳过启动")
     except Exception as e:
             logger.error(f"启动 gRPC 服务失败: {e}")
-    
+
+    # ----- 采集模块 (apscheduler) 初始化 -----
+    try:
+        from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+        from master.apps.collector.core.scheduler import CollectorScheduler
+        from master.apps.collector.admin import set_collector_scheduler
+        from master.apps.collector.api import setup_collector_module
+
+        # 构造 session_factory（复用 site.db 内部的 async engine）
+        sess_factory = async_sessionmaker(
+            site.db._async_engine,
+            class_=AsyncSession,
+            expire_on_commit=False,
+        )
+        collector_scheduler = CollectorScheduler(sess_factory)
+        scheduled_count = await collector_scheduler.bootstrap()
+        set_collector_scheduler(collector_scheduler)
+        setup_collector_module(sess_factory, collector_scheduler)
+        logger.info(f"采集调度器初始化完成，已加载 {scheduled_count} 个启用的任务")
+
+        # 停机回调
+        app.state._collector_scheduler = collector_scheduler
+    except Exception as e:  # noqa: BLE001
+        logger.exception(f"采集调度器初始化失败: {e}")
+
     logger.info("应用启动完成")
     yield
+    # ----- 优雅停机 -----
+    try:
+        sch = getattr(app.state, "_collector_scheduler", None)
+        if sch is not None:
+            sch.shutdown(wait=False)
+            logger.info("采集调度器已停止")
+    except Exception as e:  # noqa: BLE001
+        logger.error(f"采集调度器停机失败: {e}")
     logger.info("优雅停机")
 
 
@@ -174,8 +206,24 @@ site.register_admin(NavPageAdmin)
 
 site.register_admin(FileUploadApp)
 
+# 注册采集模块管理页
+try:
+    from master.apps.collector.admin import CollectorAdminApp
+    site.register_admin(CollectorAdminApp)
+    logger.info("采集模块管理页已注册")
+except Exception as e:  # noqa: BLE001
+    logger.exception(f"采集模块管理页注册失败: {e}")
+
 # 挂载后台管理系统
 site.mount_app(app)
+
+# 挂载采集模块 HTTP API
+try:
+    from master.apps.collector.api import router as collector_router
+    app.include_router(collector_router)
+    logger.info("采集模块 API 已挂载至 /api/collector")
+except Exception as e:  # noqa: BLE001
+    logger.exception(f"采集模块 API 挂载失败: {e}")
 
 # 挂载网关 HTTP API
 # if GATEWAY_AVAILABLE and gateway_router is not None:
