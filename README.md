@@ -7,14 +7,15 @@
 ### 技术栈
 
 - **语言**: Python 3.12+
-- **Web框架**: FastAPI 0.111.0
-- **管理后台**: fastapi-amis-admin 0.7.3
-- **用户认证**: fastapi-user-auth 0.7.3
+- **Web框架**: FastAPI 0.141.0
+- **管理后台**: fastapi-amis-admin 0.7.3（已本地化 vendor）
+- **用户认证**: fastapi-user-auth 0.7.3（已本地化 vendor）
 - **数据库**: SQLModel 0.0.19 + SQLite/PostgreSQL
 - **异步支持**: aiosqlite、greenlet
 - **通信协议**: HTTP、WebSocket、gRPC
 - **消息队列**: Kafka
 - **缓存/存储**: Redis、InfluxDB、ClickHouse
+- **定时调度**: APScheduler 3.11+（AsyncIOScheduler）
 - **交易所网关**: 深交所(SZSE)、上交所(SSE)、北交所(BJSE)
 - **包管理**: uv
 - **测试框架**: pytest
@@ -89,6 +90,27 @@
 │   │   │   │   ├── models.py # 数据模型
 │   │   │   │   ├── process.py # 进程管理
 │   │   │   │   └── store.py  # 持久化存储
+│   │   │   └── __init__.py
+│   │   ├── collector/        # 数据采集模块（基于 APScheduler）
+│   │   │   ├── admin.py      # 采集管理后台（仪表盘+任务CRUD+日志查询）
+│   │   │   ├── api.py        # 采集模块 HTTP API 接口
+│   │   │   ├── core/         # 采集核心模块
+│   │   │   │   ├── __init__.py
+│   │   │   │   ├── models.py # 采集任务/日志数据模型
+│   │   │   │   ├── scheduler.py # 采集调度器（APScheduler 封装）
+│   │   │   │   ├── collectors/ # 采集器实现
+│   │   │   │   │   ├── __init__.py
+│   │   │   │   │   ├── base.py # 采集器抽象基类
+│   │   │   │   │   ├── database.py # SQL 查询采集器
+│   │   │   │   │   ├── http.py # HTTP 请求采集器
+│   │   │   │   │   └── websocket.py # WebSocket 长连接采集器
+│   │   │   │   └── storages/  # 存储器实现
+│   │   │   │       ├── __init__.py
+│   │   │   │       ├── base.py # 存储器抽象基类
+│   │   │   │       ├── database.py # 数据库存储器
+│   │   │   │       ├── file.py # 文件存储器
+│   │   │   │       ├── http.py # HTTP 回调存储器
+│   │   │   │       └── kafka.py # Kafka 存储器
 │   │   │   └── __init__.py
 │   │   └── mcp_server/       # MCP Server（AI Agent 接口）
 │   │       └── __init__.py   # FastMCP 服务端 + 只读网关工具
@@ -381,6 +403,75 @@
 ##### 关键函数
 - `mcp_http_app(path="/mcp")`: 返回 MCP Streamable HTTP ASGI 应用工厂，供 FastAPI 挂载
 - `_resolve_controller(instance_id)`: 辅助函数，根据实例 ID 解析网关控制器（复用 API 层逻辑，失败抛 ValueError 由 MCP 层转为标准错误响应）
+
+#### 1.7 数据采集模块 (master/apps/collector/)
+
+##### 模块概述
+- **职责**: 基于 APScheduler 的分布式定时数据采集模块，支持多种采集方式和多种存储目的地，提供完整的任务生命周期管理和执行日志追踪
+- **采集方式（CollectorType）**:
+  - `database`: 通过 SQL 查询关系型数据库采集
+  - `http`: HTTP 请求接口采集（支持 GET/POST、自定义 Header、Body）
+  - `websocket`: WebSocket 长连接实时采集
+- **存储类型（StorageType）**:
+  - `database`: 写入数据库表
+  - `http`: 通过 HTTP 回调推送数据
+  - `file`: 写入本地文件（JSON/CSV 等）
+  - `kafka`: 写入 Kafka 消息队列
+- **调度类型（ScheduleType）**:
+  - `cron`: Cron 表达式调度（支持 5 段式/6 段式表达式）
+  - `interval`: 固定间隔调度（秒/分/时/天/周）
+  - `date`: 单次指定时间执行
+
+##### CollectorAdminApp 采集管理后台
+- **文件**: [master/apps/collector/admin.py](file:///workspace/master/apps/collector/admin.py)
+- **职责**: 提供采集任务管理的 Amis 后台界面
+- **子模块**:
+  - `CollectorDashboardAdmin`: 采集仪表盘（任务统计、成功率、最近日志、快捷操作）
+  - `CollectorTaskAdmin`: 采集任务 CRUD（创建、编辑、删除、启停、暂停/恢复、手动执行）
+  - `CollectorLogAdmin`: 执行日志查询（按任务/时间/状态筛选，查看详情与样例数据）
+
+##### Collector API 采集HTTP接口
+- **文件**: [master/apps/collector/api.py](file:///workspace/master/apps/collector/api.py)
+- **职责**: 提供采集管理的 RESTful API 接口（与 fastapi_amis_admin 自动生成的 CRUD 接口互补）
+- **主要端点**:
+  - `GET /api/collector/status`: 调度器状态概览（启动状态、任务数、成功/失败统计、今日执行次数）
+  - `POST /api/collector/bootstrap`: 从数据库重载所有已启用任务并加入调度器
+  - `POST /api/collector/tasks/{task_id}/run`: 手动触发执行任务
+  - `GET /api/collector/tasks/{task_id}/logs`: 查询指定任务的最近执行日志
+  - `POST /api/collector/shutdown`: 关闭采集调度器
+
+##### CollectorScheduler 采集调度器
+- **文件**: [master/apps/collector/core/scheduler.py](file:///workspace/master/apps/collector/core/scheduler.py)
+- **职责**: APScheduler AsyncIOScheduler 封装，串联「采集 → 存储 → 日志」全流程
+- **关键特性**:
+  - 异步调度（AsyncIOScheduler，时区 Asia/Shanghai）
+  - 并发重叠防护（相同 task_id 同一时刻只允许一个实例运行）
+  - 超时控制（采集阶段和存储阶段分别带超时）
+  - 完整执行日志（样例数据、耗时、行数、存储结果）
+  - 启动时自动恢复（bootstrap 加载所有 enabled 任务）
+- **关键方法**:
+  - `start()` / `shutdown()`: 调度器生命周期
+  - `add_or_update_job(task)`: 根据调度配置注册/更新 APScheduler Job
+  - `remove_job(task)` / `pause_job(task)` / `resume_job(task)`: 任务控制
+  - `run_task_manually(task_id)`: 手动触发执行
+  - `bootstrap()`: 启动时从数据库批量恢复已启用任务
+
+##### 采集器层 (master/apps/collector/core/collectors/)
+| 采集器 | 文件 | 说明 |
+|--------|------|------|
+| BaseCollector | [base.py](file:///workspace/master/apps/collector/core/collectors/base.py) | 抽象基类，定义 `collect()` 接口与 `CollectorResult` 结果封装 |
+| DatabaseCollector | [database.py](file:///workspace/master/apps/collector/core/collectors/database.py) | SQL 查询采集器（基于 SQLAlchemy，支持多数据库 URL） |
+| HttpCollector | [http.py](file:///workspace/master/apps/collector/core/collectors/http.py) | HTTP 请求采集器（基于 aiohttp，支持自定义方法/Header/Body） |
+| WebsocketCollector | [websocket.py](file:///workspace/master/apps/collector/core/collectors/websocket.py) | WebSocket 长连接采集器（支持订阅消息、超时控制） |
+
+##### 存储器层 (master/apps/collector/core/storages/)
+| 存储器 | 文件 | 说明 |
+|--------|------|------|
+| BaseStorage | [base.py](file:///workspace/master/apps/collector/core/storages/base.py) | 抽象基类，定义 `store()` 接口与 `StorageResult` 结果封装 |
+| DatabaseStorage | [database.py](file:///workspace/master/apps/collector/core/storages/database.py) | 数据库存储器（按配置表名批量 insert） |
+| FileStorage | [file.py](file:///workspace/master/apps/collector/core/storages/file.py) | 文件存储器（支持 JSON/CSV 格式，按日期自动分文件） |
+| HttpStorage | [http.py](file:///workspace/master/apps/collector/core/storages/http.py) | HTTP 回调存储器（Webhook 推送，支持批量） |
+| KafkaStorage | [kafka.py](file:///workspace/master/apps/collector/core/storages/kafka.py) | Kafka 存储器（confluent-kafka 异步批量生产） |
 
 #### 1.4 gRPC 服务模块 (master/grpc/)
 
@@ -732,9 +823,14 @@ def update_db_pages_parent_and_sort(self, links: list[dict], parent_id: int = No
 #### 生产依赖
 | 依赖包 | 版本 | 用途 |
 |--------|------|------|
-| fastapi | 0.111.0 | Web框架 |
-| fastapi-amis-admin | ≥0.7.3 | 管理后台框架 |
-| fastapi-user-auth | ≥0.7.3 | 用户认证 |
+| fastapi | 0.141.0 | Web框架 |
+| sqlalchemy-database | ≥0.1.1,<0.2.0 | 数据库管理（fastapi_amis_admin 依赖） |
+| aiofiles | ≥0.17.0 | 异步文件操作（fastapi_amis_admin 依赖） |
+| jinja2 | ≥3.0.0 | 模板引擎（fastapi_amis_admin 依赖） |
+| email-validator | ≥1.3.1,<3.0.0 | 邮箱验证（fastapi_user_auth 依赖） |
+| passlib | ≥1.7.4 | 密码哈希（fastapi_user_auth 依赖） |
+| bcrypt | ≥4.0.0,<4.1.0 | bcrypt 加密（fastapi_user_auth 依赖） |
+| casbin | ≥1.34.0 | 权限管理（fastapi_user_auth 依赖） |
 | sqlmodel | 0.0.19 | ORM框架 |
 | sqlmodelx | 0.0.12 | SQLModel扩展 |
 | aiosqlite | ≥0.22.1 | 异步SQLite |
@@ -752,7 +848,10 @@ def update_db_pages_parent_and_sort(self, links: list[dict], parent_id: int = No
 | aiohttp | ≥3.9.0 | 异步HTTP客户端 |
 | sqlalchemy | ≥2.0.0 | ORM框架底层 |
 | croniter | ≥2.0.0 | Cron表达式解析 |
+| apscheduler | ≥3.11.3 | 定时任务调度（数据采集模块） |
 | mcp | ≥1.9.0 | MCP（Model Context Protocol）服务端 |
+
+> **注**: `fastapi-amis-admin` 和 `fastapi-user-auth` 已本地化 vendor 至 `master/libs/`，不再作为独立 pip 依赖安装；上方列出其运行所需的传递依赖。
 
 #### 开发依赖
 | 依赖包 | 版本 | 用途 |
@@ -968,6 +1067,60 @@ ruff format .
 | OperationResult | 操作结果 |
 | GatewayStatus | 网关运行状态 |
 
+### CollectorTask（采集任务）
+
+**位置**: [master/apps/collector/core/models.py](file:///workspace/master/apps/collector/core/models.py#L95-L125)
+
+**表名**: `collector_task`
+
+**字段说明**:
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | str | 主键（32位UUID，去横杠） |
+| name | str | 任务名称（最大100字符） |
+| description | str | 任务描述（最大500字符） |
+| collector_type | CollectorType | 采集方式（database/http/websocket） |
+| collector_config | dict | 采集配置（JSON，对应各采集器参数） |
+| schedule_type | ScheduleType | 调度类型（cron/interval/date） |
+| schedule_config | dict | 调度配置（JSON，对应 Cron/Interval/Date 参数） |
+| storage_type | StorageType | 存储类型（database/http/file/kafka） |
+| storage_config | dict | 存储配置（JSON，对应各存储器参数） |
+| enabled | bool | 是否启用 |
+| timeout | int | 超时时间（秒，1-3600，默认30） |
+| status | TaskStatus | 任务状态（pending/running/paused/stopped/error） |
+| apscheduler_job_id | str | APScheduler Job ID |
+| last_run_at | datetime | 上次执行时间 |
+| last_run_status | ExecStatus | 上次执行结果（success/failed/running） |
+| last_run_duration_ms | int | 上次执行耗时（毫秒） |
+| total_success_count | int | 总成功次数 |
+| total_failed_count | int | 总失败次数 |
+| created_at | datetime | 创建时间 |
+| updated_at | datetime | 更新时间 |
+
+### CollectorLog（采集执行日志）
+
+**位置**: [master/apps/collector/core/models.py](file:///workspace/master/apps/collector/core/models.py#L154-L164)
+
+**表名**: `collector_log`
+
+**字段说明**:
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | int | 主键（自增） |
+| task_id | str | 关联任务ID（外键 → collector_task.id） |
+| trigger | str | 触发方式（scheduler / manual） |
+| status | ExecStatus | 执行状态（success/failed/running） |
+| started_at | datetime | 开始时间 |
+| finished_at | datetime | 结束时间 |
+| duration_ms | int | 耗时（毫秒） |
+| rows_count | int | 采集行数 |
+| raw_data_size | int | 原始数据大小（字节） |
+| error_message | str | 错误信息（Text，失败时填写） |
+| sample_data | dict | 采集样例数据（JSON，最多3条） |
+| storage_result | dict | 存储结果（JSON，包含 success/message/rows_stored/details） |
+
 ---
 
 ## API接口说明
@@ -1038,6 +1191,20 @@ ruff format .
   - `data.file_size`：字节数（有文件时）
   - `msg`："提交成功"
 - **实现位置**: [master/main.py#L181-L197](file:///workspace/master/main.py#L181-L197)
+
+#### 数据采集接口
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | /api/collector/status | 调度器状态概览（启动状态、任务数、成功/失败统计、今日执行次数） |
+| POST | /api/collector/bootstrap | 从数据库重载所有已启用任务并加入调度器 |
+| POST | /api/collector/tasks/{task_id}/run | 手动触发执行任务，返回本次执行日志详情 |
+| GET | /api/collector/tasks/{task_id}/logs | 查询指定任务的最近执行日志（默认最近50条） |
+| POST | /api/collector/shutdown | 关闭采集调度器（停止 APScheduler） |
+
+**除上述接口外，fastapi_amis_admin 还自动暴露以下 CRUD 接口**：
+- 采集任务 CRUD: `GET/POST/PUT/DELETE /admin/collector/task/*`
+- 采集日志查询: `GET /admin/collector/log/*`
 
 ### gRPC 接口 (Master:50051)
 
@@ -1631,3 +1798,15 @@ python -m pytest tests/ --cov=master --cov=worker
 - 抽检 master/core、master/apps/gateway、master/apps/mcp_server、master/grpc、master/index、worker/adapter、worker/scheduler、worker/transformer、tests 目录，文档结构与实际文件完全匹配
 - 工作区存在未提交变更：.trae-html-share-packages/master/templates/app.html.zip、page.html.zip（二进制文件，仅文件时间戳更新，大小无变化），一并纳入本次提交
 - 确认自上次提交（b64b544, 2026-08-14）以来无新增代码提交、无未跟踪代码文件变更
+
+## 更新于 2026-08-18
+
+- 发现 master/apps/collector/ 数据采集模块在初始提交（6e1c7ff，chore: pre-termination backup）中已存在完整代码但 README.md 未描述，本次迭代补全该模块全量文档
+- 新增「目录结构」master/apps/collector/ 子树说明：admin.py（采集管理后台含仪表盘+任务CRUD+日志查询）、api.py（采集模块HTTP API）、core/models.py（采集任务/日志数据模型）、core/scheduler.py（APScheduler 调度器封装）、core/collectors/（base/database/http/websocket 四种采集器）、core/storages/（base/database/file/http/kafka 五种存储器）
+- 新增核心模块「1.7 数据采集模块」：补充模块概述（CollectorType 三种采集方式、StorageType 四种存储类型、ScheduleType 三种调度类型）、CollectorAdminApp 管理后台三种子模块说明、Collector API 五个端点、CollectorScheduler 调度器特性与关键方法、采集器层与存储器层分类表格
+- 新增「数据模型」CollectorTask（表 collector_task，23 个字段：UUID 主键、采集/调度/存储三组 JSON 配置、任务状态、APScheduler Job ID、执行统计与时间戳）与 CollectorLog（表 collector_log，14 个字段：自增ID、触发方式、执行状态、耗时、行数、原始大小、错误信息、样例数据、存储结果JSON）两个详细字段表
+- 新增「API 接口说明 - 数据采集接口」：status/bootstrap/run/logs/shutdown 五个端点表格，并标注 fastapi_amis_admin 自动暴露的采集任务 CRUD 与日志查询路由
+- 更新「技术栈」：FastAPI 版本从 0.111.0 修正为 0.141.0、新增 APScheduler 3.11+（AsyncIOScheduler 定时调度）、标注 fastapi-amis-admin 与 fastapi-user-auth 已本地化 vendor 至 master/libs/ 目录
+- 更新「生产依赖列表」从 19 项扩充至 22 项：补充 sqlalchemy-database、aiofiles、jinja2、email-validator、passlib、bcrypt、casbin 共 7 项 vendor 传递依赖；新增 apscheduler≥3.11.3 数据采集模块依赖；修正 fastapi 0.111.0→0.141.0；底部新增 vendor 依赖说明注释
+- 验证所有新增文档内容与实际代码完全匹配：master/apps/collector/core/scheduler.py（366 行，CollectorScheduler 类）、models.py（195 行，两个表+三个 Schema）、api.py（158 行，5 个端点）、admin.py（606 行，三个 Admin 类）、三个采集器文件、四个存储器文件，所有类/函数/文件路径均与代码实际一致
+- 确认自上次 git 提交（6e1c7ff）以来工作树除本次 README 修订外无新增提交、无未跟踪代码文件变更
