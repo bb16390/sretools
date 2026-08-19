@@ -955,7 +955,7 @@ ruff format .
 | template_name | master/templates | 页面模板目录 |
 | database_url_async | SQLite | 异步数据库 URL（默认 SQLite + aiosqlite，基于 MASTER_DIR 绝对路径） |
 | database_url | "" | 同步数据库 URL（可留空，异步连接优先） |
-| log_level | "DEBUG" | 日志级别 |
+| log_level | "INFO" | 日志级别 |
 | log_dir | master/log/uvicorn.log | 常规日志文件路径 |
 | error_log_dir | master/log/uvicorn-error.log | 错误日志文件路径 |
 | log_format | '%(asctime)s - %(name)s - %(levelname)s - %(message)s' | 日志格式模板 |
@@ -1810,3 +1810,13 @@ python -m pytest tests/ --cov=master --cov=worker
 - 更新「生产依赖列表」从 19 项扩充至 22 项：补充 sqlalchemy-database、aiofiles、jinja2、email-validator、passlib、bcrypt、casbin 共 7 项 vendor 传递依赖；新增 apscheduler≥3.11.3 数据采集模块依赖；修正 fastapi 0.111.0→0.141.0；底部新增 vendor 依赖说明注释
 - 验证所有新增文档内容与实际代码完全匹配：master/apps/collector/core/scheduler.py（366 行，CollectorScheduler 类）、models.py（195 行，两个表+三个 Schema）、api.py（158 行，5 个端点）、admin.py（606 行，三个 Admin 类）、三个采集器文件、四个存储器文件，所有类/函数/文件路径均与代码实际一致
 - 确认自上次 git 提交（6e1c7ff）以来工作树除本次 README 修订外无新增提交、无未跟踪代码文件变更
+
+## 更新于 2026-08-19
+
+- 新增合并提交 5be4323（2026-08-19，Merge branch 'trae/agent-EvRYNI' into main）：项目全量代码以单一根节点提交形式重建 git 历史，共 345 个文件、109543 行新增代码；代码内容与前序版本一致，覆盖 Master 中心端（核心模块、网关管理、数据采集、gRPC 服务端、页面管理、MCP Server、Amis 管理后台 vendor）、Worker 分布式工作端（适配器层、任务调度器、数据转换层、gRPC 客户端、交易日缓存）、项目脚本（deploy/start/stop/upgrade/gRPC 代码生成）、完整测试套件
+- 修正「Master 配置」表中 log_level 默认值：文档原写为 "DEBUG"，实际 master/core/settings.py 中为 "INFO"，本次同步为 "INFO" 与代码保持一致
+- 对照 pyproject.toml 逐行核对生产依赖（27 项）与开发依赖（2 项），确认版本号完全匹配：fastapi 0.141.0、sqlmodel 0.0.19、sqlmodelx 0.0.12、mcp≥1.9.0、confluent-kafka≥2.3.0、apscheduler≥3.11.3、greenlet≥3.3.2、croniter≥2.0.0 等均一致；七个 vendor 传递依赖（sqlalchemy-database/aiofiles/jinja2/email-validator/passlib/bcrypt/casbin）版本亦完全符合
+- 配置项一致性验证：Master 20 项配置中 language="zh_CN"、amis_cdn="/static"、port=5500、log_level="INFO"、gateway_install_root/gateway_backup_root 路径均与 settings.py 实际值吻合；Worker 23 项配置中 grpc_enabled=False、grpc_server_address="localhost:50051"、grpc_only=False、log_batch_size=1000、log_level="DEBUG" 全部匹配
+- 核心类与函数抽检：AsyncFileHandler（master/core/logging.py）、CentralGrpcClient（worker/grpc/client.py）、mcp_http_app（master/apps/mcp_server/__init__.py）、TradeDayCache（worker/scheduler/trade_day_cache.py）、CollectorScheduler（master/apps/collector/core/scheduler.py）、GatewayControllerRegistry（master/apps/gateway/controllers/base.py）均存在且与文档定位匹配
+- 抽检目录 master/core、master/apps/gateway、master/apps/collector、master/apps/mcp_server、master/grpc、master/index、worker/adapter、worker/scheduler/tasks、worker/scheduler、worker/transformer/scripts、tests，文档目录结构与实际文件完全一致
+- 工作树存在未提交变更：.trae-html-share-packages/master/libs/fastapi_amis_admin/amis/templates/app.html.zip、page.html.zip 与 .trae-html-share-packages/master/templates/app.html.zip、page.html.zip（共 4 个二进制压缩包，仅文件时间戳更新，大小无变化）
