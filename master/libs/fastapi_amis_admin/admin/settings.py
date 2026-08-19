@@ -4,7 +4,7 @@ from typing import Any, Union
 from typing_extensions import Literal
 
 from fastapi_amis_admin.amis import API
-from fastapi_amis_admin.utils.pydantic import PYDANTIC_V2, BaseSettings
+from fastapi_amis_admin.utils.pydantic import BaseSettings
 
 
 class Settings(BaseSettings):
@@ -46,18 +46,10 @@ class Settings(BaseSettings):
             )
         return values
 
-    if PYDANTIC_V2:
-        from pydantic import field_validator, model_validator
+    from pydantic import field_validator, model_validator
 
-        valid_url = field_validator("amis_cdn", "site_path", "site_url", mode="before")(lambda cls, v: cls.valid_url_(v))
-        valid_database_url = model_validator(mode="before")(lambda cls, values: cls.valid_database_url_(values))
-
-    else:
-        from pydantic import root_validator, validator
-
-        valid_url = validator("amis_cdn", "site_path", "site_url", pre=True)(lambda cls, v: cls.valid_url_(v))
-        valid_database_url = root_validator(pre=True, allow_reuse=True)(lambda cls, values: cls.valid_database_url_(values))
+    valid_url = field_validator("amis_cdn", "site_path", "site_url", mode="before")(lambda cls, v: cls.valid_url_(v))
+    valid_database_url = model_validator(mode="before")(lambda cls, values: cls.valid_database_url_(values))
 
 
-if PYDANTIC_V2:
-    Settings.model_rebuild()
+Settings.model_rebuild()

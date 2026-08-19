@@ -18,7 +18,6 @@ from fastapi_amis_admin.amis.components import (
 from fastapi_amis_admin.amis.constants import LabelEnum
 from fastapi_amis_admin.models import Choices
 from fastapi_amis_admin.utils.pydantic import (
-    PYDANTIC_V2,
     ModelField,
     annotation_outer_type,
     deep_update,
@@ -68,8 +67,7 @@ class AmisParser:
                 name=formitem.name,
                 body=[
                     formitem,
-                    formitem.copy(
-                        exclude={"maxLength", "receiver"},
+                    formitem.model_copy(
                         update={"type": "textarea"},
                     ),
                 ],
@@ -98,7 +96,7 @@ class AmisParser:
         if column.type in ["switch", "mapping"]:
             column.sortable = False
         if quick_edit:
-            column.quickEdit = self.as_form_item(modelfield, set_default=True).dict(
+            column.quickEdit = self.as_form_item(modelfield, set_default=True).model_dump(
                 exclude_none=True, by_alias=True, exclude={"name", "label"}
             )
             column.quickEdit.update({"saveImmediately": True})
@@ -134,11 +132,6 @@ class AmisParser:
         """Set common attributes for FormItem and TableColumn."""
         field_info = modelfield.field_info
         if not is_filter:
-            if not PYDANTIC_V2:
-                if field_info.max_length:
-                    item.maxLength = field_info.max_length
-                if field_info.min_length:
-                    item.minLength = field_info.min_length
             type_ = annotation_outer_type(modelfield.field_info.annotation)
             item.required = modelfield.field_info.is_required() and not issubclass(type_, bool)
             if set_default and modelfield.default is not Undefined:

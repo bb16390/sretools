@@ -12,10 +12,10 @@ class BaseAmisModel(AllowExtraModelMixin):
     """Base model for amis"""
 
     def amis_json(self):
-        return self.json(exclude_none=True, by_alias=True)
+        return self.model_dump_json(exclude_none=True, by_alias=True)
 
     def amis_dict(self):
-        return self.dict(exclude_none=True, by_alias=True)
+        return self.model_dump(exclude_none=True, by_alias=True)
 
     def update_from_dict(self, kwargs: Dict[str, Any]):
         for k, v in kwargs.items():

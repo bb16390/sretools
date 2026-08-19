@@ -11,7 +11,7 @@ from starlette.requests import Request
 from starlette.responses import Response
 from starlette.status import (
     HTTP_417_EXPECTATION_FAILED,
-    HTTP_422_UNPROCESSABLE_ENTITY,
+    HTTP_422_UNPROCESSABLE_CONTENT,
     HTTP_500_INTERNAL_SERVER_ERROR,
 )
 from starlette.types import Receive, Scope, Send
@@ -51,7 +51,7 @@ class JSONResponseWithException(JSONResponse):
 def make_error_response(status: int, msg="", *, exc: Exception = None, **extra):
     """Construct an error response"""
     result = BaseApiOut(status=status, msg=msg, **extra)
-    return JSONResponseWithException(content=result.dict(), exc=exc)
+    return JSONResponseWithException(content=result.model_dump(), exc=exc)
 
 
 async def http_exception_handler(request: Request, exc: HTTPException):
@@ -66,7 +66,7 @@ async def http_exception_handler(request: Request, exc: HTTPException):
 async def request_validation_exception_handler(request: Request, exc: RequestValidationError):
     """Request parameter validation exception"""
     return make_error_response(
-        status=HTTP_422_UNPROCESSABLE_ENTITY,
+        status=HTTP_422_UNPROCESSABLE_CONTENT,
         msg=_("Request parameter validation exception"),
         body=exc.body,
         errors=exc.errors(),

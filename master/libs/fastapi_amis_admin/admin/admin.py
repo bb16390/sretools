@@ -323,7 +323,7 @@ class PageSchemaAdmin(BaseAdmin):
             if isinstance(self.page_schema, str):
                 self.page_schema = PageSchema(label=self.page_schema)
             elif isinstance(self.page_schema, PageSchema):
-                self.page_schema = self.page_schema.copy(deep=True)
+                self.page_schema = self.page_schema.model_copy(deep=True)
                 self.page_schema.label = self.page_schema.label or self.__class__.__name__
             else:
                 raise TypeError()
@@ -672,7 +672,7 @@ class ModelAdmin(SqlalchemyCrud, BaseActionAdmin):
         if not isinstance(item, (dict, BaseModel)):
             return None
         if isinstance(item, BaseModel):
-            item = item.dict(exclude_none=True, by_alias=True, exclude={"name", "label"})
+            item = item.model_dump(exclude_none=True, by_alias=True, exclude={"name", "label"})
         item.update({"saveImmediately": True})
         if item.get("type") == "switch":
             item.update({"mode": "inline"})
@@ -1177,7 +1177,7 @@ class AdminAction:
     ):
         self.admin = admin
         assert self.admin, "admin is None"
-        self.action = action or self.action.copy()
+        self.action = action or self.action.model_copy()
         self.action = self.action.update_from_dict(kwargs)
         self.name = name or self.action.id or self.action.name
         assert self.name, "name is None"
@@ -1218,7 +1218,7 @@ class FormAction(AdminAction, FormAdmin):
         FormAdmin.__init__(self, self.admin.app)
 
     async def get_action(self, request: Request, **kwargs) -> Action:
-        action = self.action and self.action.copy() or ActionType.Dialog(label=_("Custom form actions"), dialog=Dialog())
+        action = self.action and self.action.model_copy() or ActionType.Dialog(label=_("Custom form actions"), dialog=Dialog())
         node: AmisNode = getattr(action, action.actionType, None)
         if node:
             node.title = node.title or action.label or action.tooltip  # only override if not set
@@ -1300,7 +1300,7 @@ class AdminGroup(PageSchemaAdmin):
             ):
                 sub_children = await child.get_page_schema_children(request)
                 if sub_children:  # If there are sub-nodes, show them even if the parent node has no permission.
-                    page_schema = child.page_schema.copy(deep=True)
+                    page_schema = child.page_schema.model_copy(deep=True)
                     page_schema.children = sub_children
                     page_schema_list.append(page_schema)
             elif await child.has_page_permission(request, action="page"):

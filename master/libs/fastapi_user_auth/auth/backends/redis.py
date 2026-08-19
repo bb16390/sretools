@@ -15,12 +15,12 @@ class RedisTokenStore(BaseTokenStore):
         data = await self.redis.get(self.get_key(token))
         if data is None:
             return None
-        return self.TokenDataSchema.parse_raw(data)
+        return self.TokenDataSchema.model_validate_json(data)
 
     async def write_token(self, token_data: Union[_TokenDataSchemaT, dict]) -> str:
-        obj = self.TokenDataSchema.parse_obj(token_data) if isinstance(token_data, dict) else token_data
+        obj = self.TokenDataSchema.model_validate(token_data) if isinstance(token_data, dict) else token_data
         token = secrets.token_urlsafe()
-        await self.redis.set(self.get_key(token), obj.json(), ex=self.expire_seconds)
+        await self.redis.set(self.get_key(token), obj.model_dump_json(), ex=self.expire_seconds)
         return token
 
     async def destroy_token(self, token: str) -> None:

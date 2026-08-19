@@ -21,13 +21,13 @@ class JwtTokenStore(BaseTokenStore):
     async def read_token(self, token: str) -> Optional[_TokenDataSchemaT]:
         try:
             payload = jwt.decode(token, self.secret_key, algorithms=self.algorithm)
-            return self.TokenDataSchema.parse_obj(payload)
+            return self.TokenDataSchema.model_validate(payload)
         except JWTError:
             return None
 
     async def write_token(self, token_data: Union[_TokenDataSchemaT, dict]) -> str:
-        obj = self.TokenDataSchema.parse_obj(token_data) if isinstance(token_data, dict) else token_data
-        data = obj.dict()
+        obj = self.TokenDataSchema.model_validate(token_data) if isinstance(token_data, dict) else token_data
+        data = obj.model_dump()
         expire = datetime.now() + timedelta(seconds=self.expire_seconds)
         data.update({"exp": expire})
         return jwt.encode(data, self.secret_key, algorithm=self.algorithm)

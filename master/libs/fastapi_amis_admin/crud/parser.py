@@ -6,7 +6,7 @@ from uuid import UUID
 import sqlalchemy
 
 from fastapi.utils import create_model_field as create_response_field
-from pydantic import BaseConfig, BaseModel
+from pydantic import BaseModel
 from pydantic.fields import FieldInfo
 from sqlalchemy import Column, String, Table
 from sqlalchemy.engine import Row
@@ -15,7 +15,6 @@ from sqlalchemy.sql import Select
 from sqlalchemy.sql.elements import Label
 
 from fastapi_amis_admin.utils.pydantic import (
-    PYDANTIC_V2,
     ModelField,
     create_cloned_field,
     create_model_by_fields,
@@ -64,19 +63,15 @@ class ModelFieldProxy:
 
     def cloned_field(self):
         modelfield = create_cloned_field(self.__dict__["_modelfield"])
-        if PYDANTIC_V2:
-            kwargs = self.__dict__["_update"]
-            name = kwargs.pop("name", modelfield.name)
-            alias = kwargs.get("alias", None)
-            if alias:
-                kwargs.setdefault("validation_alias", alias)
-                kwargs.setdefault("serialization_alias", alias)
-            field_info = FieldInfo.merge_field_infos(modelfield.field_info, **kwargs)
-            field_info.annotation = modelfield.field_info.annotation
-            return ModelField(field_info=field_info, name=name, mode=modelfield.mode)
-        for k, v in self.__dict__["_update"].items():
-            setattr(modelfield, k, v)
-        return modelfield
+        kwargs = self.__dict__["_update"]
+        name = kwargs.pop("name", modelfield.name)
+        alias = kwargs.get("alias", None)
+        if alias:
+            kwargs.setdefault("validation_alias", alias)
+            kwargs.setdefault("serialization_alias", alias)
+        field_info = FieldInfo.merge_field_infos(modelfield.field_info, **kwargs)
+        field_info.annotation = modelfield.field_info.annotation
+        return ModelField(field_info=field_info, name=name, mode=modelfield.mode)
 
 
 class TableModelParser:
@@ -280,8 +275,7 @@ def LabelField(label: Label, field: FieldInfo, type_: type = Union[float, int, s
     """Use for adding FieldInfo to sqlalchemy Label type"""
     modelfield = _get_label_modelfield(label)
     field.alias = label.key
-    if PYDANTIC_V2:
-        field.annotation = type_
+    field.annotation = type_
     modelfield.field_info = field
     label.__ModelField__ = modelfield
     return label
@@ -299,14 +293,8 @@ class PropertyField(ModelField):
         field_info: Optional[FieldInfo] = None,
         **kwargs: Any,
     ) -> None:
-        if PYDANTIC_V2:
-            field_info = field_info or FieldInfo(default=None)
-            field_info.annotation = type_
-        else:
-            kwargs.setdefault("type_", type_)
-            kwargs.setdefault("required", required)
-            kwargs.setdefault("class_validators", {})
-            kwargs.setdefault("model_config", BaseConfig)
+        field_info = field_info or FieldInfo(default=None)
+        field_info.annotation = type_
         super().__init__(name=name, field_info=field_info, **kwargs)
 
 
@@ -331,9 +319,9 @@ def parse_obj_to_schema(obj: TableModelT, schema: Type[SchemaT], refresh: bool =
     """parse obj to schema"""
     if refresh:
         object_session(obj).refresh(obj)
-    orm_mode = model_config_attr(schema, "orm_mode", False) or model_config_attr(schema, "from_attributes", False)
-    parse = schema.from_orm if orm_mode else schema.parse_obj
-    return parse(obj)
+    # pydantic v2: `from_orm` and `parse_obj` are unified into `model_validate`.
+    # The `from_attributes` config on the schema decides whether ORM objects are accepted.
+    return schema.model_validate(obj)
 
 
 def insfield_to_modelfield(insfield: InstrumentedAttribute) -> Optional[ModelField]:
@@ -355,8 +343,7 @@ def insfield_to_modelfield(insfield: InstrumentedAttribute) -> Optional[ModelFie
     if "default_factory" not in field_info_kwargs and default is not Ellipsis:
         field_info_kwargs["default"] = default
     type_ = expression.type.python_type
-    if PYDANTIC_V2:
-        field_info_kwargs["annotation"] = type_
+    field_info_kwargs["annotation"] = type_
     if expression.comment:
         field_info_kwargs["title"] = expression.comment
     return create_response_field(name=insfield.key, type_=type_, field_info=FieldInfo(**field_info_kwargs))

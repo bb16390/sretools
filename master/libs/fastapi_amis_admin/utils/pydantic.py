@@ -14,16 +14,62 @@ from pydantic.version import VERSION as PYDANTIC_VERSION
 from typing_extensions import Annotated, get_args, get_origin
 
 PYDANTIC_V2 = PYDANTIC_VERSION.startswith("2.")
-# todo: Deprecated `dict`,`json`,`from_orm`,`parse_obj` methods in pydantic v2
+# fastapi>=0.128 requires pydantic v2. The `else` (v1) branch below is kept only
+# as a defensive guard and is effectively dead code under fastapi 0.141.0.
 if PYDANTIC_V2:
     from pydantic._internal._utils import ValueItems  # noqa: F401
-    from pydantic.v1.datetime_parse import parse_date, parse_datetime  # noqa: F401
-    from pydantic.v1.utils import deep_update, lenient_issubclass, smart_deepcopy  # noqa: F401
     from pydantic_settings import BaseSettings as _BaseSettings  # noqa: F401
 
     GenericModel = BaseModel
     from pydantic import model_validator
-    from pydantic.v1.typing import is_literal_type, is_none_type, is_union
+
+    # --- vendored replacements for pydantic.v1.* helpers ---
+    # pydantic.v1 is unsupported on Python 3.14+, so reimplement these utilities
+    # locally using the public pydantic v2 API / stdlib instead of importing them
+    # from the pydantic.v1 compatibility namespace.
+    import copy as _copy
+    import types as _types
+    from datetime import date as _date, datetime as _datetime
+    from typing import Literal as _Literal
+
+    from pydantic import TypeAdapter as _TypeAdapter
+
+    def smart_deepcopy(obj):
+        return _copy.deepcopy(obj)
+
+    def lenient_issubclass(cls, class_or_tuple):
+        try:
+            return isinstance(cls, type) and issubclass(cls, class_or_tuple)
+        except TypeError:
+            return False
+
+    def deep_update(mapping, update):
+        updated_mapping = smart_deepcopy(mapping)
+        for k, v in update.items():
+            if k in updated_mapping and isinstance(updated_mapping[k], dict) and isinstance(v, dict):
+                updated_mapping[k] = deep_update(updated_mapping[k], v)
+            else:
+                updated_mapping[k] = v
+        return updated_mapping
+
+    def is_literal_type(tp):
+        return get_origin(tp) is _Literal
+
+    def is_none_type(tp):
+        return tp is None or tp is type(None)
+
+    def is_union(tp):
+        origin = get_origin(tp)
+        return origin is Union or origin is getattr(_types, "UnionType", None)
+
+    _parse_date_adapter = _TypeAdapter(_date)
+    _parse_datetime_adapter = _TypeAdapter(_datetime)
+
+    def parse_date(value):
+        return _parse_date_adapter.validate_python(value)
+
+    def parse_datetime(value):
+        return _parse_datetime_adapter.validate_python(value)
 
     class AllowExtraModelMixin(BaseModel):
         model_config = ConfigDict(extra="allow")
@@ -115,73 +161,6 @@ if PYDANTIC_V2:
 
     def model_config_attr(model: Type[BaseModel], name: str, default: Any = None) -> Any:
         return model.model_config.get(name, default)
-
-else:
-    from pydantic import (
-        BaseSettings,  # noqa: F401
-        root_validator,
-    )
-    from pydantic.datetime_parse import parse_date, parse_datetime  # noqa: F401
-    from pydantic.fields import ModelField
-    from pydantic.generics import GenericModel  # noqa: F401
-    from pydantic.typing import is_literal_type, is_none_type, is_union
-    from pydantic.utils import (  # noqa: F401
-        ValueItems,
-        deep_update,
-        lenient_issubclass,
-        smart_deepcopy,
-    )
-
-    class AllowExtraModelMixin(BaseModel):
-        class Config:
-            extra = "allow"
-
-    class ORMModelMixin(BaseModel):
-        class Config:
-            orm_mode = True
-
-    def create_model_by_fields(
-        name: str,
-        fields: Sequence[ModelField],
-        *,
-        set_none: bool = False,
-        extra: str = "ignore",
-        **kwargs,
-    ) -> Type[BaseModel]:
-        __config__ = marge_model_config(AllowExtraModelMixin, {"extra": extra, **kwargs})
-        __validators__ = None
-        if set_none:
-            __validators__ = {"root_validator_skip_blank": root_validator(pre=True, allow_reuse=True)(root_validator_skip_blank)}
-            for f in fields:
-                f.required = False
-                f.allow_none = True
-        model = create_model(name, __config__=__config__, __validators__=__validators__)  # type: ignore
-        model.__fields__ = {f.name: f for f in fields}
-        return model
-
-    def model_update_forward_refs(model: Type[BaseModel]):
-        model.update_forward_refs()
-
-    def field_json_schema_extra(field: ModelField) -> Dict[str, Any]:
-        return field.field_info.extra or {}
-
-    def field_outer_type(field: ModelField) -> Any:
-        return field.outer_type_
-
-    def field_allow_none(field: ModelField) -> bool:
-        return field.allow_none
-
-    def model_fields(model: Type[BaseModel]) -> Dict[str, ModelField]:
-        return model.__fields__
-
-    def model_config(model: Type[BaseModel]) -> Union[type, Dict[str, Any]]:
-        return model.Config
-
-    def marge_model_config(model: Type[BaseModel], update: Dict[str, Any]) -> Union[type, Dict[str, Any]]:
-        return type("Config", (model.Config,), update)
-
-    def model_config_attr(model: Type[BaseModel], name: str, default: Any = None) -> Any:
-        return getattr(model.Config, name, default)
 
 
 def create_cloned_field(modelfield: ModelField) -> ModelField:
