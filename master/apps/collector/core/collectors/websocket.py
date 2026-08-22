@@ -64,7 +64,7 @@ class WebSocketCollector(BaseCollector):
                     await ws.send(str(subscribe_msg))
 
             async def _recv_loop():
-                stop_marker = object()
+                object()
                 try:
                     while True:
                         if message_count > 0 and len(collected) >= message_count:

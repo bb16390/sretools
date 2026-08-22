@@ -14,7 +14,7 @@ from apscheduler.triggers.interval import IntervalTrigger
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from .collectors import BaseCollector, CollectorResult, get_collector
+from .collectors import CollectorResult, get_collector
 from .models import (
     CollectorLog,
     CollectorTask,
@@ -22,7 +22,7 @@ from .models import (
     ScheduleType,
     TaskStatus,
 )
-from .storages import BaseStorage, StorageResult, get_storage
+from .storages import StorageResult, get_storage
 
 log = logging.getLogger(__name__)
 
@@ -357,7 +357,7 @@ class CollectorScheduler:
         for t in tasks:
             try:
                 await self.add_or_update_job(t)
-            except Exception as exc:  # noqa: BLE001
+            except Exception:  # noqa: BLE001
                 log.exception("bootstrap task %s failed", t.id)
                 try:
                     await self._update_task(t.id, status=TaskStatus.ERROR)

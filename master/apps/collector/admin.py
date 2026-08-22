@@ -9,7 +9,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import Body
 from fastapi_amis_admin import admin, amis
 from fastapi_amis_admin.admin import AdminApp
 from fastapi_amis_admin.amis import (
@@ -19,7 +18,6 @@ from fastapi_amis_admin.amis import (
     LevelEnum,
     Page,
     PageSchema,
-    Service,
     Tabs,
 )
 from fastapi_amis_admin.amis.components import ColumnOperation, GridColumn, TableCRUD
@@ -104,16 +102,16 @@ class CollectorDashboardAdmin(admin.PageAdmin):
 
         recent_rows = [
             {
-                "id": l.id,
-                "task_id": l.task_id,
-                "trigger": l.trigger,
-                "status": l.status.value if hasattr(l.status, "value") else str(l.status),
-                "started_at": l.started_at.strftime("%Y-%m-%d %H:%M:%S") if l.started_at else "",
-                "duration_ms": l.duration_ms,
-                "rows_count": l.rows_count,
-                "error": (l.error_message or "")[:80],
+                "id": item.id,
+                "task_id": item.task_id,
+                "trigger": item.trigger,
+                "status": item.status.value if hasattr(item.status, "value") else str(item.status),
+                "started_at": item.started_at.strftime("%Y-%m-%d %H:%M:%S") if item.started_at else "",
+                "duration_ms": item.duration_ms,
+                "rows_count": item.rows_count,
+                "error": (item.error_message or "")[:80],
             }
-            for l in recent
+            for item in recent
         ]
         task_rows = [
             {
@@ -130,19 +128,20 @@ class CollectorDashboardAdmin(admin.PageAdmin):
             for t in tasks
         ]
 
-        stat_card = lambda label, value, icon, color: amis.Card(
-            header=amis.CardHeader(title=label),
-            body=[
-                amis.Tpl(
-                    tpl=(
-                        f'<div style="display:flex;align-items:center;gap:12px">'
-                        f'<i class="fa {icon} fa-3x" style="color:{color}"></i>'
-                        f'<span style="font-size:32px;font-weight:700">{value}</span>'
-                        f'</div>'
-                    ),
-                ),
-            ],
-        )
+        def stat_card(label, value, icon, color):
+            return amis.Card(
+                    header=amis.CardHeader(title=label),
+                    body=[
+                        amis.Tpl(
+                            tpl=(
+                                f'<div style="display:flex;align-items:center;gap:12px">'
+                                f'<i class="fa {icon} fa-3x" style="color:{color}"></i>'
+                                f'<span style="font-size:32px;font-weight:700">{value}</span>'
+                                f'</div>'
+                            ),
+                        ),
+                    ],
+                )
 
         return amis.Page(
             title="采集仪表盘",
@@ -355,47 +354,6 @@ class CollectorTaskAdmin(admin.ModelAdmin):
     async def get_create_form(self, request: Request, bulk: bool = False) -> Form:
         form = await super().get_create_form(request, bulk)
         # 给用户一些默认 JSON，避免完全空
-        collector_cfg_map = {
-            CollectorType.DATABASE.value: {
-                "url": "sqlite+aiosqlite:///./data/example.db",
-                "query": "SELECT 1 AS x",
-            },
-            CollectorType.HTTP.value: {
-                "url": "https://httpbin.org/get",
-                "method": "GET",
-            },
-            CollectorType.WEBSOCKET.value: {
-                "uri": "wss://echo.websocket.org",
-                "message": {"type": "ping"},
-                "message_count": 1,
-                "duration": 5,
-            },
-        }
-        storage_cfg_map = {
-            StorageType.DATABASE.value: {
-                "url": "sqlite+aiosqlite:///./data/collected.db",
-                "table": "collected_data",
-                "create_if_missing": True,
-            },
-            StorageType.HTTP.value: {
-                "url": "https://httpbin.org/post",
-                "method": "POST",
-            },
-            StorageType.FILE.value: {
-                "path": "./data/collector/{task_id}/{date:%Y%m%d}.jsonl",
-                "format": "jsonl",
-                "mode": "append",
-            },
-            StorageType.KAFKA.value: {
-                "bootstrap_servers": "127.0.0.1:9092",
-                "topic": "collector-topic",
-            },
-        }
-        schedule_cfg_map = {
-            ScheduleType.CRON.value: {"expression": "*/5 * * * *"},
-            ScheduleType.INTERVAL.value: {"seconds": 60},
-            ScheduleType.DATE.value: {"run_date": ""},
-        }
         form.body.append(
             amis.Service(
                 type="service",
@@ -415,7 +373,7 @@ class CollectorTaskAdmin(admin.ModelAdmin):
         if scheduler is not None:
             try:
                 await scheduler.add_or_update_job(obj)
-            except Exception as exc:  # noqa: BLE001
+            except Exception:  # noqa: BLE001
                 import logging as _log
                 _log.getLogger(__name__).exception("schedule task created failed")
                 async with self.db.async_session() as sess:
@@ -429,7 +387,7 @@ class CollectorTaskAdmin(admin.ModelAdmin):
         if scheduler is not None:
             try:
                 await scheduler.add_or_update_job(obj)
-            except Exception as exc:  # noqa: BLE001
+            except Exception:  # noqa: BLE001
                 import logging as _log
                 _log.getLogger(__name__).exception("schedule task updated failed")
                 async with self.db.async_session() as sess:
