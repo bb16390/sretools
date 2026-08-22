@@ -26,7 +26,7 @@ dependencies = [
     "pydantic-settings>=2.13.1",
     "redis>=5.0.0",
     "requests>=2.33.1",
-    "sqlalchemy>=2.0.30,<2.1",
+    "sqlalchemy>=2.0.0",
     "sqlmodel==0.0.19",
     "sqlmodelx==0.0.12",
     "croniter>=2.0.0",
