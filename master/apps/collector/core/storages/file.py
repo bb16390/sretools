@@ -82,7 +82,6 @@ class FileStorage(BaseStorage):
                     f.write(json.dumps(r, default=str, ensure_ascii=False) + "\n")
         elif fmt == "csv":
             import csv
-            import io
             flag = "w" if mode == "overwrite" else "a"
             need_header = (flag == "w" or not os.path.exists(path) or os.path.getsize(path) == 0)
             with open(path, flag, encoding=encoding, newline="") as f:

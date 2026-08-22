@@ -131,19 +131,19 @@ async def list_task_logs(task_id: str, limit: int = 50):
         logs = (await sess.execute(q)).scalars().all()
     return [
         {
-            "id": l.id,
-            "trigger": l.trigger,
-            "status": l.status.value if hasattr(l.status, "value") else str(l.status),
-            "started_at": l.started_at,
-            "finished_at": l.finished_at,
-            "duration_ms": l.duration_ms,
-            "rows_count": l.rows_count,
-            "raw_size": l.raw_data_size,
-            "error_message": (l.error_message or "")[:200],
-            "sample_data": l.sample_data,
-            "storage_result": l.storage_result,
+            "id": item.id,
+            "trigger": item.trigger,
+            "status": item.status.value if hasattr(item.status, "value") else str(item.status),
+            "started_at": item.started_at,
+            "finished_at": item.finished_at,
+            "duration_ms": item.duration_ms,
+            "rows_count": item.rows_count,
+            "raw_size": item.raw_data_size,
+            "error_message": (item.error_message or "")[:200],
+            "sample_data": item.sample_data,
+            "storage_result": item.storage_result,
         }
-        for l in logs
+        for item in logs
     ]
 
 

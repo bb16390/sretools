@@ -7,9 +7,9 @@ from abc import ABC, abstractmethod
 from typing import Any
 
 if sys.version_info >= (3, 11):
-    from typing import Self
+    pass
 else:
-    from typing_extensions import Self
+    pass
 
 
 class CollectorResult:

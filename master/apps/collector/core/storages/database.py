@@ -1,8 +1,6 @@
 """数据库存储：将采集结果写入目标数据库表。"""
 from __future__ import annotations
 
-import json
-import sys
 from datetime import datetime
 from typing import Any
 
