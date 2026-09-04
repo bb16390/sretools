@@ -22,9 +22,8 @@ MASTER_PID_FILE="$PID_DIR/master.pid"
 WORKER_PID_FILE="$PID_DIR/worker.pid"
 
 # 日志目录
-LOG_DIR="$PROJECT_ROOT/logs"
-MASTER_LOG=""  # 在 start_master 中动态从 settings.py 读取
-WORKER_LOG="$LOG_DIR/worker.log"
+MASTER_LOG="$MASTER_DIR/logs/master.log"  # 在 start_master 中动态从 settings.py 读取
+WORKER_LOG="$WORKER_DIR/logs/worker.log"
 
 # 颜色定义
 RED=$'\033[0;31m'
@@ -86,7 +85,7 @@ detect_pkg_manager() {
 # 目录与环境变量
 # ------------------------------
 setup_dirs() {
-    mkdir -p "$PID_DIR" "$LOG_DIR"
+    mkdir -p "$PID_DIR"
 }
 
 # 加载 .env 文件（如果存在）
@@ -119,26 +118,6 @@ load_project_envs() {
     load_env_file "$WORKER_DIR/.env" 2>/dev/null || true
 }
 
-# 从 master/core/settings.py 读取 master 日志文件路径
-get_master_log_file() {
-    local python_cmd
-    python_cmd=$(detect_python_cmd)
-    if [ -z "$python_cmd" ]; then
-        echo "$MASTER_DIR/log/uvicorn.log"
-        return 0
-    fi
-    local log_file
-    if command -v uv &> /dev/null; then
-        log_file=$(cd "$PROJECT_ROOT" && uv run python -c "from master.core.settings import settings; print(settings.log_dir)" 2>/dev/null || true)
-    else
-        log_file=$(cd "$PROJECT_ROOT" && PYTHONPATH="$PROJECT_ROOT" "$python_cmd" -c "from master.core.settings import settings; print(settings.log_dir)" 2>/dev/null || true)
-    fi
-    if [ -n "$log_file" ]; then
-        echo "$log_file"
-    else
-        echo "$MASTER_DIR/log/uvicorn.log"
-    fi
-}
 
 # ------------------------------
 # 进程管理辅助
@@ -295,7 +274,6 @@ start_master() {
         actual_cmd="cd '$MASTER_DIR' && PYTHONPATH='${MASTER_DIR}:${PROJECT_ROOT}' '${python_cmd}' main.py"
     fi
 
-    MASTER_LOG=$(get_master_log_file)
     nohup bash -c "$actual_cmd" > /dev/null 2>&1 &
     local pid=$!
     echo "$pid" > "$MASTER_PID_FILE"
@@ -562,7 +540,7 @@ show_status() {
     print_status_line "Worker" "$WORKER_PID_FILE"
     echo "=========================================="
     echo ""
-    echo "Master 日志: $(get_master_log_file)"
+    echo "Master 日志: $MASTER_LOG"
     echo "Worker 日志: $WORKER_LOG"
     echo "PID 目录: $PID_DIR"
     echo ""
