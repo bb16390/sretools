@@ -1,8 +1,8 @@
 """Worker 入口。
 
-无论是从项目根目录运行（如 ``python -m worker.main``），
-还是直接进入 ``worker/`` 目录运行（如 ``python main.py``），
-本文件都会把 **项目根目录** 正确加入 ``sys.path``，
+无论是从项目根目录运行（如 ``python -m worker.main``),
+还是直接进入 ``worker/`` 目录运行（如 ``python main.py``),
+本文件都会把 **项目根目录** 正确加入 ``sys.path``,
 避免 ``worker/grpc`` 子包名与第三方 ``grpcio`` 库发生名称冲突。
 """
 
@@ -85,7 +85,7 @@ from worker.scheduler.tasks import (  # noqa: E402
 
 
 def setup_logging() -> None:
-    """初始化日志系统（FileHandler + AsyncFileHandler + Console Handler）。"""
+    """初始化日志系统(FileHandler + AsyncFileHandler + Console Handler)."""
     log_dir = os.path.dirname(settings.log_dir)
     os.makedirs(log_dir, exist_ok=True)
 
