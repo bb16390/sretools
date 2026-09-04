@@ -26,15 +26,9 @@ def _get_adapter_class(adapter_type: str):
         elif adapter_type == "influxdb":
             from worker.adapter.influxdb_adapter import InfluxDBAdapter
             _ADAPTER_CLASS_MAP["influxdb"] = InfluxDBAdapter
-        elif adapter_type == "http":
-            from worker.adapter.http_adapter import HttpAdapter
-            _ADAPTER_CLASS_MAP["http"] = HttpAdapter
         elif adapter_type == "redis":
             from worker.adapter.redis_adapter import RedisAdapter
             _ADAPTER_CLASS_MAP["redis"] = RedisAdapter
-        elif adapter_type == "kafka":
-            from worker.adapter.kafka_adapter import KafkaAdapter
-            _ADAPTER_CLASS_MAP["kafka"] = KafkaAdapter
         else:
             raise ValueError(f"Unknown adapter_type: {adapter_type}")
     return _ADAPTER_CLASS_MAP[adapter_type]
@@ -104,8 +98,7 @@ class DatabaseCollectorTask(BaseTask):
         next_time = cron.get_next(datetime)
 
         logger.info(
-            "DatabaseCollectorTask[%s] started. Cron: %s, Next run: %s",
-            self.task_id, cron_expression, next_time,
+            f"DatabaseCollectorTask[{self.task_id}] started. Cron: {cron_expression}, Next run: {next_time}",
         )
 
         loop = asyncio.new_event_loop()
@@ -123,8 +116,7 @@ class DatabaseCollectorTask(BaseTask):
                     if trade_day_only and self._trade_day_cache:
                         if not self._trade_day_cache.is_trade_day(now.date()):
                             logger.info(
-                                "DatabaseCollectorTask[%s] skipped: not a trade day",
-                                self.task_id,
+                                f"DatabaseCollectorTask[{self.task_id}] skipped: not a trade day",
                             )
                             cron = croniter(cron_expression, now)
                             next_time = cron.get_next(datetime)
@@ -146,25 +138,22 @@ class DatabaseCollectorTask(BaseTask):
                         duration_ms = (time.time() - start_time) * 1000
                         self._notify_status("success", result=data, duration_ms=duration_ms)
                         logger.info(
-                            "DatabaseCollectorTask[%s] query executed successfully. Duration: %.2fms",
-                            self.task_id, duration_ms,
+                            f"DatabaseCollectorTask[{self.task_id}] query executed successfully. Duration: {duration_ms:.02f}ms",
                         )
                     except Exception as e:
                         duration_ms = (time.time() - start_time) * 1000
                         self._notify_status("failed", result=str(e), duration_ms=duration_ms)
                         logger.error(
-                            "DatabaseCollectorTask[%s] query failed: %s",
-                            self.task_id, e,
+                            f"DatabaseCollectorTask[{self.task_id}] query failed: {e}",
                         )
 
                     cron = croniter(cron_expression, now)
                     next_time = cron.get_next(datetime)
                     logger.debug(
-                        "DatabaseCollectorTask[%s] next run: %s",
-                        self.task_id, next_time,
+                        f"DatabaseCollectorTask[{self.task_id}] next run: {next_time}",
                     )
 
                 self._stop_event.wait(timeout=1)
         finally:
             loop.close()
-            logger.info("DatabaseCollectorTask[%s] stopped.", self.task_id)
+            logger.info(f"DatabaseCollectorTask[{self.task_id}] stopped.") 
