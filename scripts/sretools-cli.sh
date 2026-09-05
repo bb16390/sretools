@@ -22,7 +22,7 @@ MASTER_PID_FILE="$PID_DIR/master.pid"
 WORKER_PID_FILE="$PID_DIR/worker.pid"
 
 # 日志目录
-MASTER_LOG="$MASTER_DIR/logs/master.log"  # 在 start_master 中动态从 settings.py 读取
+MASTER_LOG="$MASTER_DIR/logs/master.log"
 WORKER_LOG="$WORKER_DIR/logs/worker.log"
 
 # 颜色定义
@@ -85,7 +85,7 @@ detect_pkg_manager() {
 # 目录与环境变量
 # ------------------------------
 setup_dirs() {
-    mkdir -p "$PID_DIR"
+    mkdir -p "$PID_DIR" "$MASTER_DIR/logs" "$WORKER_DIR/logs"
 }
 
 # 加载 .env 文件（如果存在）
