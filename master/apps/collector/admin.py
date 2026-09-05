@@ -10,7 +10,10 @@ from __future__ import annotations
 
 from typing import Any
 
-from master.core.models import (
+from sqlalchemy import desc, func, select
+from starlette.requests import Request
+
+from master.apps.collector.core.models import (
     CollectorLog,
     CollectorTask,
     CollectorType,
@@ -19,9 +22,6 @@ from master.core.models import (
     StorageType,
     TaskStatus,
 )
-from sqlalchemy import desc, func, select
-from starlette.requests import Request
-
 from master.libs.fastapi_amis_admin import admin, amis
 from master.libs.fastapi_amis_admin.admin import AdminApp
 from master.libs.fastapi_amis_admin.amis import (
