@@ -1,5 +1,7 @@
 from typing import Any, Dict, List
 
+from fastapi import Body
+
 from master.libs.fastapi_amis_admin import admin, amis
 from master.libs.fastapi_amis_admin.admin import AdminApp
 from master.libs.fastapi_amis_admin.amis import Form, TableCRUD
