@@ -71,6 +71,59 @@ except OSError:
     pass
 
 # ---------------------------------------------------------------------------
+# 1.5 防止 vendored 库 (master/libs) 出现双模块身份:
+#     应用代码以 ``from master.libs.fastapi_amis_admin...`` 导入,
+#     而库内部以绝对 ``from fastapi_amis_admin...`` 导入;
+#     若不加处理,同一 .py 会被加载为两份独立模块 (sys.modules 中
+#     ``master.libs.fastapi_amis_admin.amis.components`` 与
+#     ``fastapi_amis_admin.amis.components`` 是两个不同对象),
+#     导致 ``isinstance(<PageSchema 实例 via master.libs...>,
+#     <PageSchema 类 via fastapi_amis_admin...>)`` 返回 False,
+#     ``PageSchemaAdmin.get_page_schema`` 因此抛 TypeError,启动失败。
+#     此处安装 meta_path finder,将 ``master.libs.<lib>.*`` 重定向到
+#     canonical ``<lib>.*``,保证全局唯一模块身份。
+# ---------------------------------------------------------------------------
+import importlib  # noqa: E402
+import importlib.abc  # noqa: E402
+import importlib.machinery  # noqa: E402
+
+
+class _VendorLibAliasLoader(importlib.abc.Loader):
+    """返回 canonical (顶层) 模块对象作为 ``master.libs.<lib>.*`` 别名。"""
+
+    def __init__(self, canonical_name: str) -> None:
+        self._canonical = canonical_name
+
+    def create_module(self, spec):
+        return importlib.import_module(self._canonical)
+
+    def exec_module(self, module) -> None:
+        # canonical 模块已执行过,无需重复执行
+        pass
+
+
+class _VendorLibAliasFinder(importlib.abc.MetaPathFinder):
+    """将 ``master.libs.<lib>.*`` 导入重定向到 canonical ``<lib>.*``。"""
+
+    _MAP = {
+        "master.libs.fastapi_amis_admin": "fastapi_amis_admin",
+        "master.libs.fastapi_user_auth": "fastapi_user_auth",
+    }
+
+    def find_spec(self, fullname, path=None, target=None):
+        for prefix, canonical_prefix in self._MAP.items():
+            if fullname == prefix or fullname.startswith(prefix + "."):
+                canonical = canonical_prefix + fullname[len(prefix):]
+                return importlib.machinery.ModuleSpec(
+                    fullname, _VendorLibAliasLoader(canonical)
+                )
+        return None
+
+
+if not any(isinstance(f, _VendorLibAliasFinder) for f in sys.meta_path):
+    sys.meta_path.insert(0, _VendorLibAliasFinder())
+
+# ---------------------------------------------------------------------------
 # 2. 导入内部模块（必须放在 sys.path 调整之后）
 # ---------------------------------------------------------------------------
 from fastapi import FastAPI as FastAPIBase
@@ -158,7 +211,7 @@ async def lifespan(app: FastAPI):
 
         # 构造 session_factory（复用 site.db 内部的 async engine）
         sess_factory = async_sessionmaker(
-            site.db._async_engine,
+            site.db.engine,
             class_=AsyncSession,
             expire_on_commit=False,
         )

@@ -160,10 +160,17 @@ def get_uvicorn_log_config(settings) -> dict:
     保留各自的 ``StreamHandler``（终端输出）并 ``propagate=True``，因此
     同一条日志会同时落地终端与文件，且每个通道仅写一次。
 
-    访问日志格式在 ``settings.log_format`` 基础上，将 ``%(message)s``
+    访问日志格式在 ``settings.log_format`` 基礎上，将 ``%(message)s``
     替换为 ``%(client_addr)s - "%(request_line)s" %(status_code)s``，
     由 ``uvicorn.logging.AccessFormatter`` 注入这些字段。
     """
+    # 确保日志文件所在目录存在，避免 TimedRotatingFileHandler 初始化失败
+    log_dir = getattr(settings, "log_dir", "")
+    if log_dir:
+        log_parent = os.path.dirname(log_dir)
+        if log_parent:
+            os.makedirs(log_parent, exist_ok=True)
+
     # 用访问日志专用字段替换 %(message)s，保持前缀与业务日志一致
     if "%(message)s" in settings.log_format:
         access_fmt = settings.log_format.replace(
