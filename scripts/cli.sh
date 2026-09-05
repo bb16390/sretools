@@ -535,7 +535,6 @@ show_status() {
     echo "=========================================="
     echo "          服务运行状态"
     echo "=========================================="
-    setup_dirs
     print_status_line "Master" "$MASTER_PID_FILE" "5500"
     print_status_line "Worker" "$WORKER_PID_FILE"
     echo "=========================================="
