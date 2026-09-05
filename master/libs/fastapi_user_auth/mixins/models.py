@@ -1,23 +1,29 @@
 from datetime import datetime
 from typing import Optional
 
-from fastapi_amis_admin.models import Field, SQLModel
-from fastapi_amis_admin.utils.translation import i18n as _
 from pydantic import EmailStr, SecretStr
 from sqlalchemy import func
 from sqlmodel import AutoString
 
 from fastapi_user_auth.utils.sqltypes import SecretStrType
+from master.libs.fastapi_amis_admin.models import Field, SQLModel
+from master.libs.fastapi_amis_admin.utils.translation import i18n as _
 
 
 class PkMixin(SQLModel):
     id: Optional[int] = Field(
-        default=None, title="ID", primary_key=True, nullable=False, sa_column_kwargs={"autoincrement": True}
+        default=None,
+        title="ID",
+        primary_key=True,
+        nullable=False,
+        sa_column_kwargs={"autoincrement": True},
     )
 
 
 class CreateTimeMixin(SQLModel):
-    create_time: datetime = Field(default_factory=datetime.now, title=_("Create Time"), index=True)
+    create_time: datetime = Field(
+        default_factory=datetime.now, title=_("Create Time"), index=True
+    )
 
 
 class UpdateTimeMixin(SQLModel):
@@ -40,12 +46,18 @@ class CUDTimeMixin(CreateTimeMixin, UpdateTimeMixin, DeleteTimeMixin):
 
 
 class UsernameMixin(SQLModel):
-    username: str = Field(title=_("Username"), max_length=32, unique=True, index=True, nullable=False)
+    username: str = Field(
+        title=_("Username"), max_length=32, unique=True, index=True, nullable=False
+    )
 
 
 class PasswordMixin(SQLModel):
     password: SecretStr = Field(
-        title=_("Password"), max_length=128, sa_type=SecretStrType, nullable=False, amis_form_item="input-password"
+        title=_("Password"),
+        max_length=128,
+        sa_type=SecretStrType,
+        nullable=False,
+        amis_form_item="input-password",
     )
 
 
@@ -55,5 +67,10 @@ class EmailMixin(SQLModel):
     """
 
     email: Optional[EmailStr] = Field(
-        None, title=_("Email"), sa_type=AutoString, index=True, nullable=True, amis_form_item="input-email"
+        None,
+        title=_("Email"),
+        sa_type=AutoString,
+        index=True,
+        nullable=True,
+        amis_form_item="input-email",
     )

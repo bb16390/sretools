@@ -1,6 +1,6 @@
 from sqlalchemy_database import AsyncDatabase, Database
 
-from fastapi_amis_admin.admin import AdminSite
+from master.libs.fastapi_amis_admin.admin import AdminSite
 
 from ._db import (
     ASYNC_DB_NAME,

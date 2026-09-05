@@ -1,8 +1,13 @@
 from typing import Optional, Type
 
 from fastapi import FastAPI
-from fastapi_amis_admin.admin import AdminSite, PageSchemaAdmin, Settings
-from fastapi_amis_admin.amis.components import (
+from starlette.requests import Request
+
+from fastapi_user_auth.admin import UserAuthApp as DefaultUserAuthApp
+from fastapi_user_auth.auth import Auth
+from fastapi_user_auth.auth.schemas import SystemUserEnum
+from master.libs.fastapi_amis_admin.admin import AdminSite, PageSchemaAdmin, Settings
+from master.libs.fastapi_amis_admin.amis.components import (
     ActionType,
     App,
     Dialog,
@@ -10,15 +15,10 @@ from fastapi_amis_admin.amis.components import (
     PageSchema,
     Service,
 )
-from fastapi_amis_admin.amis.constants import SizeEnum
-from fastapi_amis_admin.amis.types import AmisAPI
-from fastapi_amis_admin.crud.utils import SqlalchemyDatabase
-from fastapi_amis_admin.utils.translation import i18n as _
-from starlette.requests import Request
-
-from fastapi_user_auth.admin import UserAuthApp as DefaultUserAuthApp
-from fastapi_user_auth.auth import Auth
-from fastapi_user_auth.auth.schemas import SystemUserEnum
+from master.libs.fastapi_amis_admin.amis.constants import SizeEnum
+from master.libs.fastapi_amis_admin.amis.types import AmisAPI
+from master.libs.fastapi_amis_admin.crud.utils import SqlalchemyDatabase
+from master.libs.fastapi_amis_admin.utils.translation import i18n as _
 
 
 class AuthAdminSite(AdminSite):
@@ -26,7 +26,14 @@ class AuthAdminSite(AdminSite):
     auth: Auth = None
     UserAuthApp: Type[DefaultUserAuthApp] = DefaultUserAuthApp
 
-    def __init__(self, settings: Settings, *, fastapi: FastAPI = None, engine: SqlalchemyDatabase = None, auth: Auth = None):
+    def __init__(
+        self,
+        settings: Settings,
+        *,
+        fastapi: FastAPI = None,
+        engine: SqlalchemyDatabase = None,
+        auth: Auth = None,
+    ):
         super().__init__(settings, fastapi=fastapi, engine=engine)
         self.auth = auth or self.auth or Auth(db=self.db)
         self.register_admin(self.UserAuthApp)
@@ -40,7 +47,9 @@ class AuthAdminSite(AdminSite):
     async def get_page(self, request: Request) -> App:
         app = await super().get_page(request)
         user_auth_app = self.get_admin_or_create(self.UserAuthApp)
-        username = await self.auth.get_current_user_identity(request) or SystemUserEnum.GUEST
+        username = (
+            await self.auth.get_current_user_identity(request) or SystemUserEnum.GUEST
+        )
         app.header = Flex(
             className="w-full",
             justify="flex-end",
@@ -69,17 +78,27 @@ class AuthAdminSite(AdminSite):
                                 ),
                             ),
                         ),
-                        ActionType.Url(label=_("Sign out"), url=f"{user_auth_app.router_path}/logout", blank=False),
+                        ActionType.Url(
+                            label=_("Sign out"),
+                            url=f"{user_auth_app.router_path}/logout",
+                            blank=False,
+                        ),
                     ],
                 },
             ],
         )
         return app
 
-    async def has_page_permission(self, request: Request, obj: PageSchemaAdmin = None, action: str = None) -> bool:
+    async def has_page_permission(
+        self, request: Request, obj: PageSchemaAdmin = None, action: str = None
+    ) -> bool:
         obj = obj or self
-        subject = await self.auth.get_current_user_identity(request) or SystemUserEnum.GUEST
+        subject = (
+            await self.auth.get_current_user_identity(request) or SystemUserEnum.GUEST
+        )
         if action != "page":
             action = "page:" + action
-        effect = self.auth.enforcer.enforce("u:" + subject, obj.unique_id, action, "page")
+        effect = self.auth.enforcer.enforce(
+            "u:" + subject, obj.unique_id, action, "page"
+        )
         return effect

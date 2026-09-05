@@ -1,12 +1,12 @@
 from typing import Any, Dict, List
 
 from casbin import AsyncEnforcer
-from fastapi_amis_admin.utils.translation import i18n as _
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from fastapi_user_auth.auth.models import CasbinRule
 from fastapi_user_auth.auth.schemas import SystemUserEnum
+from master.libs.fastapi_amis_admin.utils.translation import i18n as _
 
 
 # 执行casbin字符串规则
@@ -27,17 +27,23 @@ def permission_decode(permission: str) -> List[str]:
     return permission.strip("#").split("#")
 
 
-async def get_subject_page_permissions(enforcer: AsyncEnforcer, *, subject: str, implicit: bool = False) -> List[str]:
+async def get_subject_page_permissions(
+    enforcer: AsyncEnforcer, *, subject: str, implicit: bool = False
+) -> List[str]:
     """根据指定subject主体获取casbin规则"""
     if implicit:
         permissions = await enforcer.get_implicit_permissions_for_user(subject)
-        permissions = [perm for perm in permissions if perm[-2] == "page"]  # 只获取page权限
+        permissions = [
+            perm for perm in permissions if perm[-2] == "page"
+        ]  # 只获取page权限
     else:
         permissions = enforcer.get_filtered_policy(0, subject, "", "", "page")
     return [permission_encode(*permission[1:]) for permission in permissions]
 
 
-async def update_subject_roles(enforcer: AsyncEnforcer, *, subject: str, role_keys: List[str]):
+async def update_subject_roles(
+    enforcer: AsyncEnforcer, *, subject: str, role_keys: List[str]
+):
     """更新casbin主体权限角色"""
     # todo 避免角色链循环
     new_roles = {(subject, role) for role in role_keys if role and role != subject}
@@ -167,7 +173,9 @@ async def update_subject_data_permissions(
             reverse = item.get("reverse", False)
             # 检查当前用户是否有对应的权限,只有自己拥有的权限才能分配给其他主体
             perm = permission_decode(item["rol"])
-            if super_subject != "u:" + SystemUserEnum.ROOT and (reverse ^ enforcer.enforce(super_subject, *perm)):
+            if super_subject != "u:" + SystemUserEnum.ROOT and (
+                reverse ^ enforcer.enforce(super_subject, *perm)
+            ):
                 continue
             effect = "allow" if is_allow ^ reverse else "deny"
             rules.add((subject, *perm, effect))

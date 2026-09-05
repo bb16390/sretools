@@ -16,16 +16,22 @@ from starlette.status import (
 )
 from starlette.types import Receive, Scope, Send
 
-from fastapi_amis_admin.crud import BaseApiOut
-from fastapi_amis_admin.utils.translation import i18n as _
+from master.libs.fastapi_amis_admin.crud import BaseApiOut
+from master.libs.fastapi_amis_admin.utils.translation import i18n as _
 
 
 def register_exception_handlers(app: FastAPI, **kwargs):
     """global exception catch"""
-    app.add_exception_handler(RequestValidationError, handler=request_validation_exception_handler)
+    app.add_exception_handler(
+        RequestValidationError, handler=request_validation_exception_handler
+    )
     app.add_exception_handler(HTTPException, handler=http_exception_handler)
-    app.add_exception_handler(ValidationException, handler=inner_validation_exception_handler)
-    app.add_exception_handler(ValidationError, handler=inner_validation_exception_handler)
+    app.add_exception_handler(
+        ValidationException, handler=inner_validation_exception_handler
+    )
+    app.add_exception_handler(
+        ValidationError, handler=inner_validation_exception_handler
+    )
     app.add_exception_handler(Exception, handler=server_error_handler)
 
 
@@ -63,7 +69,9 @@ async def http_exception_handler(request: Request, exc: HTTPException):
     return JSONResponse(content=content, status_code=exc.status_code, headers=headers)
 
 
-async def request_validation_exception_handler(request: Request, exc: RequestValidationError):
+async def request_validation_exception_handler(
+    request: Request, exc: RequestValidationError
+):
     """Request parameter validation exception"""
     return make_error_response(
         status=HTTP_422_UNPROCESSABLE_CONTENT,
@@ -73,7 +81,9 @@ async def request_validation_exception_handler(request: Request, exc: RequestVal
     )
 
 
-async def inner_validation_exception_handler(request: Request, exc: typing.Union[ValidationException, ValidationError]):
+async def inner_validation_exception_handler(
+    request: Request, exc: typing.Union[ValidationException, ValidationError]
+):
     """Internal data validation exception.Output a json response and throw the exception again."""
     return make_error_response(
         status=HTTP_417_EXPECTATION_FAILED,

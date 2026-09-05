@@ -1,9 +1,10 @@
 from typing import Any, Dict, Optional
 
 from fastapi import HTTPException
-from fastapi_amis_admin.crud import BaseApiOut
-from fastapi_amis_admin.models import IntegerChoices
-from fastapi_amis_admin.utils.translation import i18n as _
+
+from master.libs.fastapi_amis_admin.crud import BaseApiOut
+from master.libs.fastapi_amis_admin.models import IntegerChoices
+from master.libs.fastapi_amis_admin.utils.translation import i18n as _
 
 
 class ErrorCode(IntegerChoices):
@@ -16,10 +17,16 @@ class ErrorCode(IntegerChoices):
     RETRY_LATER = (11, _("Try again later"))  # 稍后重试
     # 用户相关错误
     USER_NOT_FOUND = (40100, _("User does not exist"))  # 用户不存在
-    USER_PASSWORD_ERROR = (40101, _("Username or password is incorrect"))  # 用户名或者密码错误
+    USER_PASSWORD_ERROR = (
+        40101,
+        _("Username or password is incorrect"),
+    )  # 用户名或者密码错误
     USER_IS_EXIST = (40102, _("User already exists"))  # 用户已存在
     USER_NAME_IS_EXIST = (40103, _("Username already exists"))  # 用户名已存在
-    USER_MOBILE_IS_EXIST = (40104, _("User mobile phone number already exists"))  # 用户手机号已存在
+    USER_MOBILE_IS_EXIST = (
+        40104,
+        _("User mobile phone number already exists"),
+    )  # 用户手机号已存在
     USER_EMAIL_IS_EXIST = (40105, _("User mailbox already exists"))  # 用户邮箱已存在
 
     # 用户权限相关

@@ -20,12 +20,6 @@ from casbin import AsyncEnforcer
 from fastapi import Depends, FastAPI, Form, HTTPException, params
 from fastapi.security import OAuth2PasswordBearer
 from fastapi.security.utils import get_authorization_scheme_param
-from fastapi_amis_admin.admin import BaseAdminSite
-from fastapi_amis_admin.crud.base import RouterMixin
-from fastapi_amis_admin.crud.schema import BaseApiOut
-from fastapi_amis_admin.utils.functools import cached_property
-from fastapi_amis_admin.utils.pydantic import create_model_by_model
-from fastapi_amis_admin.utils.translation import i18n as _
 from passlib.context import CryptContext
 from pydantic import BaseModel, SecretStr
 from sqlalchemy.orm import Session
@@ -36,6 +30,13 @@ from starlette.middleware.authentication import AuthenticationMiddleware
 from starlette.requests import Request
 from starlette.responses import RedirectResponse, Response
 from starlette.websockets import WebSocket
+
+from master.libs.fastapi_amis_admin.admin import BaseAdminSite
+from master.libs.fastapi_amis_admin.crud.base import RouterMixin
+from master.libs.fastapi_amis_admin.crud.schema import BaseApiOut
+from master.libs.fastapi_amis_admin.utils.functools import cached_property
+from master.libs.fastapi_amis_admin.utils.pydantic import create_model_by_model
+from master.libs.fastapi_amis_admin.utils.translation import i18n as _
 
 from ..utils.sqlachemy_adapter import Adapter
 from .backends.base import BaseTokenStore
@@ -53,11 +54,15 @@ class AuthBackend(AuthenticationBackend, Generic[UserModelT]):
 
     @staticmethod
     def get_user_token(request: Request) -> Optional[str]:
-        authorization: str = request.headers.get("Authorization") or request.cookies.get("Authorization")
+        authorization: str = request.headers.get(
+            "Authorization"
+        ) or request.cookies.get("Authorization")
         scheme, token = get_authorization_scheme_param(authorization)
         return None if not authorization or scheme.lower() != "bearer" else token
 
-    async def authenticate(self, request: Request) -> Tuple["Auth", Optional[UserModelT]]:
+    async def authenticate(
+        self, request: Request
+    ) -> Tuple["Auth", Optional[UserModelT]]:
         return self.auth, await self.auth.get_current_user(request)
 
     def attach_middleware(self, app: FastAPI):
@@ -81,7 +86,9 @@ class Auth(Generic[UserModelT]):
         self.user_model = user_model or self.user_model
         assert self.user_model, "user_model is None"
         self.db = db or self.db
-        self.backend = self.backend or AuthBackend(self, token_store or DbTokenStore(self.db))
+        self.backend = self.backend or AuthBackend(
+            self, token_store or DbTokenStore(self.db)
+        )
         self.pwd_context = pwd_context
         self._enforcer = enforcer
 
@@ -98,7 +105,9 @@ class Auth(Generic[UserModelT]):
         )
         return enforcer
 
-    async def authenticate_user(self, username: str, password: Union[str, SecretStr]) -> Optional[UserModelT]:
+    async def authenticate_user(
+        self, username: str, password: Union[str, SecretStr]
+    ) -> Optional[UserModelT]:
         user = await self.db.async_scalar(
             select(self.user_model).where(
                 self.user_model.username == username,
@@ -107,8 +116,16 @@ class Auth(Generic[UserModelT]):
             )
         )
         if user:
-            pwd = password.get_secret_value() if isinstance(password, SecretStr) else password
-            pwd2 = user.password.get_secret_value() if isinstance(user.password, SecretStr) else user.password
+            pwd = (
+                password.get_secret_value()
+                if isinstance(password, SecretStr)
+                else password
+            )
+            pwd2 = (
+                user.password.get_secret_value()
+                if isinstance(user.password, SecretStr)
+                else user.password
+            )
             if self.pwd_context.verify(pwd, pwd2):  # 用户存在 且 密码验证通过
                 return user
         return None
@@ -118,16 +135,22 @@ class Auth(Generic[UserModelT]):
             return request.scope["user_token_info"]
         request.scope["auth"] = self  # 为了在token_store中使用
         token = self.backend.get_user_token(request)
-        request.scope["user_token_info"] = await self.backend.token_store.read_token(token) if token else None
+        request.scope["user_token_info"] = (
+            await self.backend.token_store.read_token(token) if token else None
+        )
         return request.scope["user_token_info"]
 
-    async def get_current_user_identity(self, request: Request, name: str = None) -> str:
+    async def get_current_user_identity(
+        self, request: Request, name: str = None
+    ) -> str:
         token_info = await self._get_token_info(request)
         name = name or "username"
         user_identity = getattr(token_info, name, "") if token_info else ""
         return user_identity
 
-    async def has_role_for_user(self, identity: str, roles: Union[str, Sequence[str]], is_any: bool = True) -> bool:
+    async def has_role_for_user(
+        self, identity: str, roles: Union[str, Sequence[str]], is_any: bool = True
+    ) -> bool:
         identity = "u:" + identity
         if isinstance(roles, str):
             roles = [roles]
@@ -143,7 +166,9 @@ class Auth(Generic[UserModelT]):
                 return False
         return not is_any
 
-    async def has_role(self, request: Request, *, roles: Union[str, Sequence[str]]) -> bool:
+    async def has_role(
+        self, request: Request, *, roles: Union[str, Sequence[str]]
+    ) -> bool:
         """判断当前用户是否拥有指定角色,拥有任意一个角色即返回True"""
         identity = await self.get_current_user_identity(request)
         return await self.has_role_for_user(identity, roles, is_any=True)
@@ -152,7 +177,11 @@ class Auth(Generic[UserModelT]):
         if "user" in request.scope:  # 防止重复授权
             return request.scope["user"]
         token_info = await self._get_token_info(request)
-        request.scope["user"]: UserModelT = await self.db.async_get(self.user_model, token_info.id) if token_info else None
+        request.scope["user"]: UserModelT = (
+            await self.db.async_get(self.user_model, token_info.id)
+            if token_info
+            else None
+        )
         return request.scope["user"]
 
     def requires(
@@ -206,7 +235,9 @@ class Auth(Generic[UserModelT]):
                     type_ = parameter.name
                     break
             else:
-                raise Exception(f'No "request" or "websocket" argument on function "{func}"')
+                raise Exception(
+                    f'No "request" or "websocket" argument on function "{func}"'
+                )
 
             if type_ == "websocket":
                 # Handle websocket functions. (Always async)
@@ -243,7 +274,9 @@ class Auth(Generic[UserModelT]):
                     assert isinstance(request, Request)
                     loop = asyncio.new_event_loop()
                     asyncio.set_event_loop(loop)
-                    response = loop.run_until_complete(loop.create_task(depend(request)))
+                    response = loop.run_until_complete(
+                        loop.create_task(depend(request))
+                    )
                     if response is True:
                         return func(*args, **kwargs)
                     return response
@@ -261,7 +294,9 @@ class Auth(Generic[UserModelT]):
             session.flush()
 
         # create admin user
-        user = session.scalar(select(self.user_model).where(self.user_model.username == role_key))
+        user = session.scalar(
+            select(self.user_model).where(self.user_model.username == role_key)
+        )
         if not user:
             user = self.user_model(
                 username=role_key,
@@ -283,20 +318,33 @@ class Auth(Generic[UserModelT]):
             session.flush()
         return user
 
-    async def create_role_user(self, role_key: str = "root", commit: bool = True) -> User:
+    async def create_role_user(
+        self, role_key: str = "root", commit: bool = True
+    ) -> User:
         user = await self.db.async_run_sync(self._create_role_user_sync, role_key)
         if commit:
             await self.db.async_commit()
         return user
 
-    async def request_login(self, request: Request, response: Response, username: str, password: str) -> BaseApiOut[UserLoginOut]:
+    async def request_login(
+        self, request: Request, response: Response, username: str, password: str
+    ) -> BaseApiOut[UserLoginOut]:
         if request.scope.get("user"):
-            return BaseApiOut(code=1, msg=_("User logged in!"), data=UserLoginOut.model_validate(request.user))
-        user = await request.auth.authenticate_user(username=username, password=password)
+            return BaseApiOut(
+                code=1,
+                msg=_("User logged in!"),
+                data=UserLoginOut.model_validate(request.user),
+            )
+        user = await request.auth.authenticate_user(
+            username=username, password=password
+        )
         # 保存登录记录
         ip = request.client.host  # 获取真实ip
         # 获取代理ip
-        ips = [request.headers.get(key, "").strip() for key in ["x-forwarded-for", "x-real-ip", "x-client-ip", "remote-host"]]
+        ips = [
+            request.headers.get(key, "").strip()
+            for key in ["x-forwarded-for", "x-real-ip", "x-client-ip", "remote-host"]
+        ]
         forwarded_for = ",".join([i for i in set(ips) if i and i != ip])
         history = LoginHistory(
             user_id=user.id if user else None,
@@ -315,7 +363,9 @@ class Auth(Generic[UserModelT]):
             return BaseApiOut(status=-2, msg=_("Inactive user status!"))
         request.scope["user"] = user
         token_info = UserLoginOut.model_validate(request.user)
-        token_info.access_token = await request.auth.backend.token_store.write_token(request.user.model_dump())
+        token_info.access_token = await request.auth.backend.token_store.write_token(
+            request.user.model_dump()
+        )
         response.set_cookie("Authorization", f"bearer {token_info.access_token}")
         return BaseApiOut(code=0, data=token_info)
 
@@ -359,7 +409,13 @@ class AuthRouter(RouterMixin):
         )
         # oauth2
         if self.route_gettoken:
-            self.router.dependencies.append(Depends(self.OAuth2(tokenUrl=f"{self.router_path}/gettoken", auto_error=False)))
+            self.router.dependencies.append(
+                Depends(
+                    self.OAuth2(
+                        tokenUrl=f"{self.router_path}/gettoken", auto_error=False
+                    )
+                )
+            )
             self.router.add_api_route(
                 "/gettoken",
                 self.route_gettoken,
@@ -395,7 +451,12 @@ class AuthRouter(RouterMixin):
 
     @property
     def route_gettoken(self):
-        async def oauth_token(request: Request, response: Response, username: str = Form(...), password: str = Form(...)):
+        async def oauth_token(
+            request: Request,
+            response: Response,
+            username: str = Form(...),
+            password: str = Form(...),
+        ):
             return await self.auth.request_login(request, response, username, password)
 
         return oauth_token

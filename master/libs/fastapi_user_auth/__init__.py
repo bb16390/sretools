@@ -4,7 +4,7 @@ __url__ = "https://github.com/amisadmin/fastapi_user_auth"
 import gettext
 from pathlib import Path
 
-from fastapi_amis_admin import i18n
+from master.libs.fastapi_amis_admin import i18n
 
 BASE_DIR = Path(__file__).resolve().parent
 

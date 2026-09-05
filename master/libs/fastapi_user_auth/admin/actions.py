@@ -2,15 +2,6 @@ from functools import lru_cache
 from typing import Any, Dict, List, Union
 
 from casbin import AsyncEnforcer
-from fastapi_amis_admin import amis
-from fastapi_amis_admin.admin import FormAdmin, ModelAction, PageSchemaAdmin
-from fastapi_amis_admin.amis import SchemaNode
-from fastapi_amis_admin.amis.components import ActionType, FormItem
-from fastapi_amis_admin.amis.constants import LevelEnum
-from fastapi_amis_admin.crud.schema import BaseApiOut
-from fastapi_amis_admin.models import Field
-from fastapi_amis_admin.utils.pydantic import ModelField
-from fastapi_amis_admin.utils.translation import i18n as _
 from pydantic import BaseModel
 from starlette.requests import Request
 from starlette.responses import RedirectResponse
@@ -30,6 +21,15 @@ from fastapi_user_auth.utils.casbin import (
     update_subject_page_permissions,
     update_subject_roles,
 )
+from master.libs.fastapi_amis_admin import amis
+from master.libs.fastapi_amis_admin.admin import FormAdmin, ModelAction, PageSchemaAdmin
+from master.libs.fastapi_amis_admin.amis import SchemaNode
+from master.libs.fastapi_amis_admin.amis.components import ActionType, FormItem
+from master.libs.fastapi_amis_admin.amis.constants import LevelEnum
+from master.libs.fastapi_amis_admin.crud.schema import BaseApiOut
+from master.libs.fastapi_amis_admin.models import Field
+from master.libs.fastapi_amis_admin.utils.pydantic import ModelField
+from master.libs.fastapi_amis_admin.utils.translation import i18n as _
 
 
 @lru_cache()
@@ -49,7 +49,9 @@ def get_admin_select_permission_rows(admin: PageSchemaAdmin) -> List[Dict[str, A
 
 
 @lru_cache()
-def get_admin_field_permission_rows(admin: PageSchemaAdmin, action: str) -> List[Dict[str, Any]]:
+def get_admin_field_permission_rows(
+    admin: PageSchemaAdmin, action: str
+) -> List[Dict[str, Any]]:
     """获取指定页面权限的字段权限,用于amis组件"""
     rows = []
     fields = {}
@@ -141,12 +143,16 @@ class UpdateSubRolesAction(BaseSubAction):
             ),
         )
 
-    async def get_form_item(self, request: Request, modelfield: ModelField) -> Union[FormItem, SchemaNode]:
+    async def get_form_item(
+        self, request: Request, modelfield: ModelField
+    ) -> Union[FormItem, SchemaNode]:
         item = await super().get_form_item(request, modelfield)
         from fastapi_user_auth.admin import RoleAdmin  # 防止循环导入
 
         # role_admin = self.admin.app.get_admin_or_create(RoleAdmin)
-        role_admin, _ = self.admin.app.get_page_schema_child(unique_id=RoleAdmin.unique_id)
+        role_admin, _ = self.admin.app.get_page_schema_child(
+            unique_id=RoleAdmin.unique_id
+        )
         if item.name == "role_keys":  # 为角色树形选择器数据指定API源
             # value
             item.source = f"post:{role_admin.router_path}/list?page=1&perPage=100"
@@ -159,24 +165,41 @@ class UpdateSubRolesAction(BaseSubAction):
             return BaseApiOut(data=self.schema())
         subject = await self.get_subject_by_id(item_id)
         if not subject:
-            return BaseApiOut(status=0, msg=_("Models not supported yet"))  # 暂不支持的模型
+            return BaseApiOut(
+                status=0, msg=_("Models not supported yet")
+            )  # 暂不支持的模型
         role_keys = await self.site.auth.enforcer.get_roles_for_user(subject)
-        return BaseApiOut(data=self.schema(role_keys=",".join(role_keys).replace("r:", "")))
+        return BaseApiOut(
+            data=self.schema(role_keys=",".join(role_keys).replace("r:", ""))
+        )
 
-    async def handle(self, request: Request, item_id: List[str], data: schema, **kwargs):
+    async def handle(
+        self, request: Request, item_id: List[str], data: schema, **kwargs
+    ):
         """更新角色Casbin权限"""
         subject = await self.get_subject_by_id(item_id[0])
         if not subject:
-            return BaseApiOut(status=0, msg=_("Models not supported yet"))  # 暂不支持的模型
-        identity = await self.site.auth.get_current_user_identity(request) or SystemUserEnum.GUEST
+            return BaseApiOut(
+                status=0, msg=_("Models not supported yet")
+            )  # 暂不支持的模型
+        identity = (
+            await self.site.auth.get_current_user_identity(request)
+            or SystemUserEnum.GUEST
+        )
         if subject == "u:" + identity:
-            return BaseApiOut(status=0, msg=_("Cannot modify own permissions"))  # 不能修改自己的权限
+            return BaseApiOut(
+                status=0, msg=_("Cannot modify own permissions")
+            )  # 不能修改自己的权限
         enforcer: AsyncEnforcer = self.site.auth.enforcer
         role_keys = [f"r:{role}" for role in data.role_keys.split(",") if role]
         if role_keys and identity not in [SystemUserEnum.ROOT, SystemUserEnum.ADMIN]:
             # 检查当前用户是否有对应的角色,只有自己拥有的角色才能分配给其他主体
-            user_role_keys = await self.site.auth.enforcer.get_implicit_roles_for_user("u:" + identity)
-            role_keys = [role for role in role_keys if role in user_role_keys]  # 过滤掉当前用户的角色
+            user_role_keys = await self.site.auth.enforcer.get_implicit_roles_for_user(
+                "u:" + identity
+            )
+            role_keys = [
+                role for role in role_keys if role in user_role_keys
+            ]  # 过滤掉当前用户的角色
         # 更新角色列表
         await update_subject_roles(enforcer, subject=subject, role_keys=role_keys)
         return BaseApiOut(msg="success")
@@ -221,10 +244,14 @@ class BaseSubPermAction(BaseSubAction):
             # ),
         )
 
-    async def get_form_item(self, request: Request, modelfield: ModelField) -> Union[FormItem, SchemaNode]:
+    async def get_form_item(
+        self, request: Request, modelfield: ModelField
+    ) -> Union[FormItem, SchemaNode]:
         item = await super().get_form_item(request, modelfield)
         if item.name == "permissions":  # 为角色树形选择器数据指定API源
-            item.source = f"{self.site.settings.site_path}/auth/site_admin_actions_options"
+            item.source = (
+                f"{self.site.settings.site_path}/auth/site_admin_actions_options"
+            )
         return item
 
 
@@ -242,7 +269,9 @@ class ViewSubPagePermAction(BaseSubPermAction):
         level=LevelEnum.warning,
     )
 
-    async def get_form_item(self, request: Request, modelfield: ModelField) -> Union[FormItem, SchemaNode]:
+    async def get_form_item(
+        self, request: Request, modelfield: ModelField
+    ) -> Union[FormItem, SchemaNode]:
         item = await super().get_form_item(request, modelfield)
         if item.name == "permissions":  # 为角色树形选择器数据指定API源
             item.multiple = True
@@ -255,13 +284,25 @@ class ViewSubPagePermAction(BaseSubPermAction):
             return BaseApiOut(data=self.schema())
         subject = await self.get_subject_by_id(item_id)
         if not subject:
-            return BaseApiOut(status=0, msg=_("Models not supported yet"))  # 暂不支持的模型
-        permissions = await get_subject_page_permissions(self.site.auth.enforcer, subject=subject, implicit=self._implicit)
-        permissions = [perm.replace("#allow", "") for perm in permissions if perm.endswith("#allow")]
+            return BaseApiOut(
+                status=0, msg=_("Models not supported yet")
+            )  # 暂不支持的模型
+        permissions = await get_subject_page_permissions(
+            self.site.auth.enforcer, subject=subject, implicit=self._implicit
+        )
+        permissions = [
+            perm.replace("#allow", "")
+            for perm in permissions
+            if perm.endswith("#allow")
+        ]
         return BaseApiOut(data=self.schema(permissions=",".join(permissions)))
 
-    async def handle(self, request: Request, item_id: List[str], data: BaseModel, **kwargs):
-        return BaseApiOut(status=1, msg=_("Please update settings through [Setting Permissions]!"))  # 请通过的【设置权限】更新设置!
+    async def handle(
+        self, request: Request, item_id: List[str], data: BaseModel, **kwargs
+    ):
+        return BaseApiOut(
+            status=1, msg=_("Please update settings through [Setting Permissions]!")
+        )  # 请通过的【设置权限】更新设置!
 
 
 class UpdateSubDataPermAction(BaseSubPermAction):
@@ -273,7 +314,13 @@ class UpdateSubDataPermAction(BaseSubPermAction):
         name="update_subject_data_permissions",
         icon="fa fa-gavel",
         tooltip=_("Update data permissions"),  # 更新数据权限
-        dialog=amis.Dialog(actions=[amis.Action(actionType="submit", label=_("Save"), close=False, primary=True)]),  # 保存
+        dialog=amis.Dialog(
+            actions=[
+                amis.Action(
+                    actionType="submit", label=_("Save"), close=False, primary=True
+                )
+            ]
+        ),  # 保存
         level=LevelEnum.warning,
     )
 
@@ -302,7 +349,9 @@ class UpdateSubDataPermAction(BaseSubPermAction):
             ),
         )
 
-    async def get_form_item(self, request: Request, modelfield: ModelField) -> Union[FormItem, SchemaNode]:
+    async def get_form_item(
+        self, request: Request, modelfield: ModelField
+    ) -> Union[FormItem, SchemaNode]:
         item = await super().get_form_item(request, modelfield)
         if item.name == "permissions":  # 为角色树形选择器数据指定API源
             item.multiple = False
@@ -322,7 +371,9 @@ class UpdateSubDataPermAction(BaseSubPermAction):
             # 获取对方权限列表
             subject = await self.get_subject_by_id(item_id)
             options = []
-            options = get_admin_action_options_by_subject(self.site.auth.enforcer, subject, self.site)
+            options = get_admin_action_options_by_subject(
+                self.site.auth.enforcer, subject, self.site
+            )
             return BaseApiOut(data=options)
 
         @self.router.get("/get_admin_action_perm_options", response_model=BaseApiOut)
@@ -371,7 +422,9 @@ class UpdateSubDataPermAction(BaseSubPermAction):
             # 设置初始值
             subject = await self.get_subject_by_id(item_id)
             if type == "effect":
-                value = get_subject_effect_matrix(self.site.auth.enforcer, subject=subject, rows=rows)
+                value = get_subject_effect_matrix(
+                    self.site.auth.enforcer, subject=subject, rows=rows
+                )
             else:
                 value = get_subject_policy_matrix(
                     self.site.auth.enforcer,
@@ -389,11 +442,18 @@ class UpdateSubDataPermAction(BaseSubPermAction):
         form.body = amis.Grid(columns=form.body)
         return form
 
-    async def handle(self, request: Request, item_id: List[str], data: BaseModel, **kwargs):
+    async def handle(
+        self, request: Request, item_id: List[str], data: BaseModel, **kwargs
+    ):
         subject = await self.get_subject_by_id(item_id[0])
-        identity = await self.site.auth.get_current_user_identity(request) or SystemUserEnum.GUEST
+        identity = (
+            await self.site.auth.get_current_user_identity(request)
+            or SystemUserEnum.GUEST
+        )
         if subject == "u:" + identity:
-            return BaseApiOut(status=0, msg=_("Cannot modify own permissions"))  # 不能修改自己的权限
+            return BaseApiOut(
+                status=0, msg=_("Cannot modify own permissions")
+            )  # 不能修改自己的权限
         msg = await update_subject_data_permissions(
             self.site.auth.enforcer,
             subject=subject,
@@ -416,21 +476,40 @@ class UpdateSubPagePermsAction(ViewSubPagePermAction):
         level=LevelEnum.warning,
     )
 
-    async def handle(self, request: Request, item_id: List[str], data: BaseModel, **kwargs):
+    async def handle(
+        self, request: Request, item_id: List[str], data: BaseModel, **kwargs
+    ):
         """更新角色Casbin权限"""
         subject = await self.get_subject_by_id(item_id[0])
         if not subject:
-            return BaseApiOut(status=0, msg=_("Models not supported yet"))  # 暂不支持的模型
-        identity = await self.site.auth.get_current_user_identity(request) or SystemUserEnum.GUEST
+            return BaseApiOut(
+                status=0, msg=_("Models not supported yet")
+            )  # 暂不支持的模型
+        identity = (
+            await self.site.auth.get_current_user_identity(request)
+            or SystemUserEnum.GUEST
+        )
         if subject == "u:" + identity:
-            return BaseApiOut(status=0, msg=_("Cannot modify own permissions"))  # 不能修改自己的权限
+            return BaseApiOut(
+                status=0, msg=_("Cannot modify own permissions")
+            )  # 不能修改自己的权限
         # 权限列表
-        permissions = [perm for perm in data.permissions.split(",") if perm and perm.endswith("#page")]  # 分割权限列表,去除空值
+        permissions = [
+            perm
+            for perm in data.permissions.split(",")
+            if perm and perm.endswith("#page")
+        ]  # 分割权限列表,去除空值
         enforcer: AsyncEnforcer = self.site.auth.enforcer
         if permissions and identity != SystemUserEnum.ROOT:
             #  检查当前用户是否有对应的权限,只有自己拥有的权限才能分配给其他主体
-            permissions = [perm for perm in permissions if enforcer.enforce("u:" + identity, *permission_decode(perm))]
-        await update_subject_page_permissions(enforcer, subject=subject, permissions=permissions)  # 更新角色权限
+            permissions = [
+                perm
+                for perm in permissions
+                if enforcer.enforce("u:" + identity, *permission_decode(perm))
+            ]
+        await update_subject_page_permissions(
+            enforcer, subject=subject, permissions=permissions
+        )  # 更新角色权限
         return BaseApiOut(msg="success")
 
 
@@ -453,7 +532,9 @@ class CopyUserAuthLinkAction(ModelAction):
     class schema(UsernameMixin, PkMixin):
         auth_url: str = Field(
             title=_("Authorization link"),  # 授权链接
-            description=_("Copy the link to your browser and open it without logging in"),  # 复制链接到浏览器打开即可免登录
+            description=_(
+                "Copy the link to your browser and open it without logging in"
+            ),  # 复制链接到浏览器打开即可免登录
             amis_form_item=amis.Static(
                 copyable=True,
             ),
@@ -472,7 +553,10 @@ class CopyUserAuthLinkAction(ModelAction):
         token = await auth.backend.token_store.write_token(token_data)
         return BaseApiOut(
             msg=_("Successful operation"),  # 操作成功
-            data={**token_data, "auth_url": f"{str(request.base_url)[:-1]}{self.site.router_path}/login_by_token?token={token}"},
+            data={
+                **token_data,
+                "auth_url": f"{str(request.base_url)[:-1]}{self.site.router_path}/login_by_token?token={token}",
+            },
         )
 
     def register_router(self):

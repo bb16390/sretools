@@ -1,9 +1,5 @@
 from typing import Optional
 
-from fastapi_amis_admin.amis.components import ColumnImage, InputImage
-from fastapi_amis_admin.crud.parser import LabelField
-from fastapi_amis_admin.models import Field
-from fastapi_amis_admin.utils.translation import i18n as _
 from sqlalchemy import func, select
 
 from fastapi_user_auth.mixins.models import (  # noqa F401
@@ -16,6 +12,10 @@ from fastapi_user_auth.mixins.models import (  # noqa F401
     UpdateTimeMixin,
     UsernameMixin,
 )
+from master.libs.fastapi_amis_admin.amis.components import ColumnImage, InputImage
+from master.libs.fastapi_amis_admin.crud.parser import LabelField
+from master.libs.fastapi_amis_admin.models import Field
+from master.libs.fastapi_amis_admin.utils.translation import i18n as _
 
 
 class BaseUser(PkMixin, CUDTimeMixin, UsernameMixin, PasswordMixin, EmailMixin):
@@ -52,9 +52,16 @@ class User(BaseUser, table=True):
 class BaseRole(PkMixin, CUDTimeMixin):
     __tablename__ = "auth_role"
 
-    key: str = Field(title=_("Role ID"), max_length=40, unique=True, index=True, nullable=False)  # 角色标识
+    key: str = Field(
+        title=_("Role ID"), max_length=40, unique=True, index=True, nullable=False
+    )  # 角色标识
     name: str = Field(default="", title=_("Role Name"), max_length=40)  # 角色名称
-    desc: str = Field(default="", title=_("Role description"), max_length=400, amis_form_item="textarea")  # 角色描述
+    desc: str = Field(
+        default="",
+        title=_("Role description"),
+        max_length=400,
+        amis_form_item="textarea",
+    )  # 角色描述
 
 
 class Role(BaseRole, table=True):

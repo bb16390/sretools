@@ -6,7 +6,7 @@ from typing import Awaitable, Callable, List, Union
 from sqlalchemy.sql import Select
 from starlette.requests import Request
 
-from fastapi_amis_admin.admin import ModelAdmin
+from master.libs.fastapi_amis_admin.admin import ModelAdmin
 
 
 class FieldPermEnum(int, Enum):
@@ -20,7 +20,9 @@ class FieldPermEnum(int, Enum):
     EDIT = CREATE | UPDATE
 
 
-SelectPermCallable = Callable[[ModelAdmin, Request, Select], Union[Select, Awaitable[Select]]]
+SelectPermCallable = Callable[
+    [ModelAdmin, Request, Select], Union[Select, Awaitable[Select]]
+]
 
 
 @dataclass

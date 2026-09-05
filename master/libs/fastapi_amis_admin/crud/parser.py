@@ -1,20 +1,36 @@
 import datetime
 from functools import lru_cache
-from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, Type, TypeVar, Union
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Iterable,
+    List,
+    Optional,
+    Tuple,
+    Type,
+    TypeVar,
+    Union,
+)
 from uuid import UUID
 
 import sqlalchemy
-
 from fastapi.utils import create_model_field as create_response_field
 from pydantic import BaseModel
 from pydantic.fields import FieldInfo
 from sqlalchemy import Column, String, Table
 from sqlalchemy.engine import Row
-from sqlalchemy.orm import ColumnProperty, DeclarativeMeta, InstrumentedAttribute, RelationshipProperty, object_session
+from sqlalchemy.orm import (
+    ColumnProperty,
+    DeclarativeMeta,
+    InstrumentedAttribute,
+    RelationshipProperty,
+    object_session,
+)
 from sqlalchemy.sql import Select
 from sqlalchemy.sql.elements import Label
 
-from fastapi_amis_admin.utils.pydantic import (
+from master.libs.fastapi_amis_admin.utils.pydantic import (
     ModelField,
     create_cloned_field,
     create_model_by_fields,
@@ -56,7 +72,9 @@ class ModelFieldProxy:
     def __getattr__(self, item):
         if item == "cloned_field":
             return self.__dict__[item]
-        return self.__dict__["_update"].get(item, getattr(self.__dict__["_modelfield"], item))
+        return self.__dict__["_update"].get(
+            item, getattr(self.__dict__["_modelfield"], item)
+        )
 
     def __setattr__(self, key, value):
         self.__dict__["_update"][key] = value
@@ -79,42 +97,62 @@ class TableModelParser:
     _alias_format = "{table_name}__{field_key}"
 
     def __init__(self, table_model: Type[TableModelT]):
-        assert hasattr(table_model, "__table__"), "table_model must be has __table__ attribute."
+        assert hasattr(table_model, "__table__"), (
+            "table_model must be has __table__ attribute."
+        )
         self.table_model = table_model
         self.__table__: Table = self.table_model.__table__  # type: ignore
         self.__fields__ = self.get_table_model_fields(table_model)
 
     @staticmethod
-    def get_table_model_insfields(table_model: Type[TableModelT]) -> Dict[str, InstrumentedAttribute]:
+    def get_table_model_insfields(
+        table_model: Type[TableModelT],
+    ) -> Dict[str, InstrumentedAttribute]:
         """Get sqlalchemy InstrumentedAttribute from InspecTable."""
-        return {name: field for name, field in table_model.__dict__.items() if isinstance(field, InstrumentedAttribute)}
+        return {
+            name: field
+            for name, field in table_model.__dict__.items()
+            if isinstance(field, InstrumentedAttribute)
+        }
 
     @staticmethod
     def get_table_model_fields(table_model: Type[TableModelT]) -> Dict[str, ModelField]:
         """Get pydantic ModelField from sqlalchemy InspecTable."""
         if issubclass(table_model, BaseModel):
             return model_fields(table_model)
-        elif hasattr(table_model, "__pydantic_model__") and issubclass(table_model.__pydantic_model__, BaseModel):
+        elif hasattr(table_model, "__pydantic_model__") and issubclass(
+            table_model.__pydantic_model__, BaseModel
+        ):
             return model_fields(table_model.__pydantic_model__)
         return {}
 
     @staticmethod
-    def get_table_model_schema(table_model: Type[TableModelT]) -> Optional[Type[BaseModel]]:
+    def get_table_model_schema(
+        table_model: Type[TableModelT],
+    ) -> Optional[Type[BaseModel]]:
         """Get pydantic schema from sqlalchemy InspecTable."""
 
         if issubclass(table_model, BaseModel):
             return table_model
-        elif hasattr(table_model, "__pydantic_model__") and issubclass(table_model.__pydantic_model__, BaseModel):
+        elif hasattr(table_model, "__pydantic_model__") and issubclass(
+            table_model.__pydantic_model__, BaseModel
+        ):
             return table_model.__pydantic_model__
         insfields = TableModelParser.get_table_model_insfields(table_model)
         if not insfields:
             return None
-        modelfields = [insfield_to_modelfield(insfield) for insfield in insfields.values()]
+        modelfields = [
+            insfield_to_modelfield(insfield) for insfield in insfields.values()
+        ]
         modelfields = list(filter(None, modelfields))
-        table_model.__pydantic_model__ = create_model_by_fields(table_model.__name__, modelfields, orm_mode=True)
+        table_model.__pydantic_model__ = create_model_by_fields(
+            table_model.__name__, modelfields, orm_mode=True
+        )
         return table_model.__pydantic_model__
 
-    def get_modelfield(self, field: Union[ModelField, SqlaInsAttr, Label], clone: bool = False) -> Optional[ModelFieldType]:
+    def get_modelfield(
+        self, field: Union[ModelField, SqlaInsAttr, Label], clone: bool = False
+    ) -> Optional[ModelFieldType]:
         """Get pydantic ModelField from sqlmodel field.
         Args:
             field:  ModelField, SQLModelField or Label
@@ -157,7 +195,9 @@ class TableModelParser:
             return (
                 field.name
                 if field.table.name == self.__table__.name
-                else self._alias_format.format(table_name=field.table.name, field_key=field.name)
+                else self._alias_format.format(
+                    table_name=field.table.name, field_key=field.name
+                )
             )
         elif isinstance(field, InstrumentedAttribute):
             return (
@@ -178,7 +218,9 @@ class TableModelParser:
         return (
             field.key
             if field.class_.__tablename__ == self.__table__.name
-            else self._name_format.format(model_name=field.class_.__tablename__, field_name=field.key)
+            else self._name_format.format(
+                model_name=field.class_.__tablename__, field_name=field.key
+            )
         )
 
     def get_row_keys(self, row: Row) -> List[str]:
@@ -208,7 +250,9 @@ class TableModelParser:
         self,
         fields: Iterable[Union[SqlaField, Any]],
         save_class: Tuple[Union[type, Tuple[Any, ...]], ...] = None,
-        exclude_property: Tuple[Union[type, Tuple[Any, ...]], ...] = (RelationshipProperty,),
+        exclude_property: Tuple[Union[type, Tuple[Any, ...]], ...] = (
+            RelationshipProperty,
+        ),
     ) -> List[Union[InstrumentedAttribute, Any]]:
         result = []
         for field in fields:
@@ -233,7 +277,9 @@ class TableModelParser:
         fields = self.filter_insfield(fields, save_class=save_class)
         modelfields = [self.get_modelfield(ins, clone=True) for ins in fields]
         # Filter out any None values or out excluded fields
-        modelfields = [field for field in modelfields if field and field.name not in exclude]
+        modelfields = [
+            field for field in modelfields if field and field.name not in exclude
+        ]
         return modelfields
 
 
@@ -242,7 +288,9 @@ SQLModelFieldParser = TableModelParser
 
 
 @lru_cache()
-def get_python_type_parse(field: Union[InstrumentedAttribute, Column, Label]) -> Callable:
+def get_python_type_parse(
+    field: Union[InstrumentedAttribute, Column, Label],
+) -> Callable:
     try:
         python_type = field.expression.type.python_type
         if issubclass(python_type, UUID):
@@ -271,7 +319,9 @@ def _get_label_modelfield(label: Label) -> ModelField:
     return modelfield
 
 
-def LabelField(label: Label, field: FieldInfo, type_: type = Union[float, int, str, None]) -> Label:
+def LabelField(
+    label: Label, field: FieldInfo, type_: type = Union[float, int, str, None]
+) -> Label:
     """Use for adding FieldInfo to sqlalchemy Label type"""
     modelfield = _get_label_modelfield(label)
     field.alias = label.key
@@ -298,7 +348,9 @@ class PropertyField(ModelField):
         super().__init__(name=name, field_info=field_info, **kwargs)
 
 
-def get_insfield_by_key(table_model: Type[TableModelT], key: str) -> Optional[InstrumentedAttribute]:
+def get_insfield_by_key(
+    table_model: Type[TableModelT], key: str
+) -> Optional[InstrumentedAttribute]:
     """Get the field of the model according to the alias"""
     for insfield in table_model.__dict__.values():
         if isinstance(insfield, InstrumentedAttribute) and insfield.key == key:
@@ -306,7 +358,9 @@ def get_insfield_by_key(table_model: Type[TableModelT], key: str) -> Optional[In
     return None
 
 
-def get_modelfield_by_alias(table_model: Type[TableModelT], alias: str) -> Optional[ModelField]:
+def get_modelfield_by_alias(
+    table_model: Type[TableModelT], alias: str
+) -> Optional[ModelField]:
     """Get the field of the model according to the alias"""
     fields = TableModelParser.get_table_model_fields(table_model).values()
     for field in fields:
@@ -315,7 +369,9 @@ def get_modelfield_by_alias(table_model: Type[TableModelT], alias: str) -> Optio
     return None
 
 
-def parse_obj_to_schema(obj: TableModelT, schema: Type[SchemaT], refresh: bool = False) -> SchemaT:
+def parse_obj_to_schema(
+    obj: TableModelT, schema: Type[SchemaT], refresh: bool = False
+) -> SchemaT:
     """parse obj to schema"""
     if refresh:
         object_session(obj).refresh(obj)
@@ -346,7 +402,9 @@ def insfield_to_modelfield(insfield: InstrumentedAttribute) -> Optional[ModelFie
     field_info_kwargs["annotation"] = type_
     if expression.comment:
         field_info_kwargs["title"] = expression.comment
-    return create_response_field(name=insfield.key, type_=type_, field_info=FieldInfo(**field_info_kwargs))
+    return create_response_field(
+        name=insfield.key, type_=type_, field_info=FieldInfo(**field_info_kwargs)
+    )
 
 
 def register_model(schema: Type[SchemaT]):

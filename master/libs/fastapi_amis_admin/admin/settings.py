@@ -3,8 +3,8 @@ from typing import Any, Union
 
 from typing_extensions import Literal
 
-from fastapi_amis_admin.amis import API
-from fastapi_amis_admin.utils.pydantic import BaseSettings
+from master.libs.fastapi_amis_admin.amis import API
+from master.libs.fastapi_amis_admin.utils.pydantic import BaseSettings
 
 
 class Settings(BaseSettings):
@@ -48,8 +48,12 @@ class Settings(BaseSettings):
 
     from pydantic import field_validator, model_validator
 
-    valid_url = field_validator("amis_cdn", "site_path", "site_url", mode="before")(lambda cls, v: cls.valid_url_(v))
-    valid_database_url = model_validator(mode="before")(lambda cls, values: cls.valid_database_url_(values))
+    valid_url = field_validator("amis_cdn", "site_path", "site_url", mode="before")(
+        lambda cls, v: cls.valid_url_(v)
+    )
+    valid_database_url = model_validator(mode="before")(
+        lambda cls, values: cls.valid_database_url_(values)
+    )
 
 
 Settings.model_rebuild()

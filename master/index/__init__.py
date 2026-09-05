@@ -4,7 +4,7 @@ __url__ = "https://github.com/amisadmin/fastapi_amis_admin_nav"
 # import gettext
 # import os
 #
-# from fastapi_amis_admin import i18n
+# from master.libs.fastapi_amis_admin import i18n
 #
 # BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 #

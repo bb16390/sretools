@@ -1,9 +1,10 @@
 from enum import Enum
 from typing import Optional
 
-from fastapi_amis_admin.utils.translation import i18n as _
 from pydantic import BaseModel, SecretStr, model_validator
 from sqlmodel import Field
+
+from master.libs.fastapi_amis_admin.utils.translation import i18n as _
 
 from .models import BaseUser, EmailMixin, PasswordMixin, UsernameMixin
 
@@ -28,7 +29,10 @@ class UserRegIn(UsernameMixin, PasswordMixin, EmailMixin):
 
     @model_validator(mode="after")
     def check_passwords_match(self):
-        if self.password is not None and self.password.get_secret_value() != self.password2:
+        if (
+            self.password is not None
+            and self.password.get_secret_value() != self.password2
+        ):
             raise ValueError("passwords do not match!")
         return self
 

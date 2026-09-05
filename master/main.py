@@ -57,7 +57,7 @@ if _normalize(PROJECT_ROOT) not in {_normalize(p) for p in sys.path}:
     sys.path.insert(0, PROJECT_ROOT)
 
 # 3. 将本地化 vendor 库目录 (master/libs/) 提前到 sys.path 首位,
-#    使 `import fastapi_amis_admin` / `import fastapi_user_auth` 解析到
+#    使 `from master.libs import fastapi_amis_admin` / `from master.libs import fastapi_user_auth` 解析到
 #    项目内置副本,而不是 site-packages 中的 pip 版本。
 _LIBS_DIR = os.path.join(_MASTER_DIR, "libs")
 if os.path.isdir(_LIBS_DIR) and _normalize(_LIBS_DIR) not in {
@@ -73,7 +73,7 @@ except OSError:
 # ---------------------------------------------------------------------------
 # 1.5 防止 vendored 库 (master/libs) 出现双模块身份:
 #     应用代码以 ``from master.libs.fastapi_amis_admin...`` 导入,
-#     而库内部以绝对 ``from fastapi_amis_admin...`` 导入;
+#     而库内部以绝对 ``from master.libs.fastapi_amis_admin...`` 导入;
 #     若不加处理,同一 .py 会被加载为两份独立模块 (sys.modules 中
 #     ``master.libs.fastapi_amis_admin.amis.components`` 与
 #     ``fastapi_amis_admin.amis.components`` 是两个不同对象),
@@ -83,46 +83,35 @@ except OSError:
 #     此处安装 meta_path finder,将 ``master.libs.<lib>.*`` 重定向到
 #     canonical ``<lib>.*``,保证全局唯一模块身份。
 # ---------------------------------------------------------------------------
-import importlib  # noqa: E402
-import importlib.abc  # noqa: E402
-import importlib.machinery  # noqa: E402
+# import importlib  # noqa: E402
+# import importlib.abc  # noqa: E402
+# import importlib.machinery  # noqa: E402
 
-
-class _VendorLibAliasLoader(importlib.abc.Loader):
-    """返回 canonical (顶层) 模块对象作为 ``master.libs.<lib>.*`` 别名。"""
-
-    def __init__(self, canonical_name: str) -> None:
-        self._canonical = canonical_name
-
-    def create_module(self, spec):
-        return importlib.import_module(self._canonical)
-
-    def exec_module(self, module) -> None:
-        # canonical 模块已执行过,无需重复执行
-        pass
-
-
-class _VendorLibAliasFinder(importlib.abc.MetaPathFinder):
-    """将 ``master.libs.<lib>.*`` 导入重定向到 canonical ``<lib>.*``。"""
-
-    _MAP = {
-        "master.libs.fastapi_amis_admin": "fastapi_amis_admin",
-        "master.libs.fastapi_user_auth": "fastapi_user_auth",
-    }
-
-    def find_spec(self, fullname, path=None, target=None):
-        for prefix, canonical_prefix in self._MAP.items():
-            if fullname == prefix or fullname.startswith(prefix + "."):
-                canonical = canonical_prefix + fullname[len(prefix):]
-                return importlib.machinery.ModuleSpec(
-                    fullname, _VendorLibAliasLoader(canonical)
-                )
-        return None
-
-
-if not any(isinstance(f, _VendorLibAliasFinder) for f in sys.meta_path):
-    sys.meta_path.insert(0, _VendorLibAliasFinder())
-
+# class _VendorLibAliasLoader(importlib.abc.Loader):
+#     """返回 canonical (顶层) 模块对象作为 ``master.libs.<lib>.*`` 别名。"""
+#     def __init__(self, canonical_name: str) -> None:
+#         self._canonical = canonical_name
+#     def create_module(self, spec):
+#         return importlib.import_module(self._canonical)
+#     def exec_module(self, module) -> None:
+#         # canonical 模块已执行过,无需重复执行
+#         pass
+# class _VendorLibAliasFinder(importlib.abc.MetaPathFinder):
+#     """将 ``master.libs.<lib>.*`` 导入重定向到 canonical ``<lib>.*``。"""
+#     _MAP = {
+#         "master.libs.fastapi_amis_admin": "fastapi_amis_admin",
+#         "master.libs.fastapi_user_auth": "fastapi_user_auth",
+#     }
+#     def find_spec(self, fullname, path=None, target=None):
+#         for prefix, canonical_prefix in self._MAP.items():
+#             if fullname == prefix or fullname.startswith(prefix + "."):
+#                 canonical = canonical_prefix + fullname[len(prefix) :]
+#                 return importlib.machinery.ModuleSpec(
+#                     fullname, _VendorLibAliasLoader(canonical)
+#                 )
+#         return None
+# if not any(isinstance(f, _VendorLibAliasFinder) for f in sys.meta_path):
+#     sys.meta_path.insert(0, _VendorLibAliasFinder())
 # ---------------------------------------------------------------------------
 # 2. 导入内部模块（必须放在 sys.path 调整之后）
 # ---------------------------------------------------------------------------

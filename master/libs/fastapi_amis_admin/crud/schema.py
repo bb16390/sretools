@@ -2,7 +2,10 @@ from enum import Enum
 from typing import Any, Dict, Generic, List, Optional, TypeVar, Union
 from warnings import warn
 
-from fastapi_amis_admin.utils.pydantic import AllowExtraModelMixin, GenericModel
+from master.libs.fastapi_amis_admin.utils.pydantic import (
+    AllowExtraModelMixin,
+    GenericModel,
+)
 
 _T = TypeVar("_T")
 
@@ -72,5 +75,9 @@ class Paginator:
 
     @property
     def show_total(self):
-        warn("show_total is deprecated, use showTotal instead", DeprecationWarning, stacklevel=1)
+        warn(
+            "show_total is deprecated, use showTotal instead",
+            DeprecationWarning,
+            stacklevel=1,
+        )
         return self.showTotal

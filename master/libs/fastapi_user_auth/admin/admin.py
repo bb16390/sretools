@@ -2,33 +2,6 @@ import contextlib
 from typing import Any, Callable, Dict, List, Type
 
 from fastapi import Depends, HTTPException
-from fastapi_amis_admin.admin import (
-    AdminAction,
-    AdminApp,
-    AutoTimeModelAdmin,
-    FieldPermEnum,
-    FootableModelAdmin,
-    FormAdmin,
-    PageSchemaAdmin,
-    ReadOnlyModelAdmin,
-    SoftDeleteModelAdmin,
-)
-from fastapi_amis_admin.amis.components import (
-    Action,
-    ActionType,
-    ButtonToolbar,
-    Form,
-    Grid,
-    Horizontal,
-    Html,
-    Page,
-    PageSchema,
-)
-from fastapi_amis_admin.amis.constants import DisplayModeEnum, LevelEnum
-from fastapi_amis_admin.crud.base import SchemaUpdateT
-from fastapi_amis_admin.crud.schema import BaseApiOut
-from fastapi_amis_admin.utils.pydantic import model_fields
-from fastapi_amis_admin.utils.translation import i18n as _
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlmodel.sql.expression import Select
@@ -59,10 +32,39 @@ from fastapi_user_auth.auth.models import (
 )
 from fastapi_user_auth.auth.schemas import SystemUserEnum, UserLoginOut
 from fastapi_user_auth.mixins.admin import AuthFieldModelAdmin, AuthSelectModelAdmin
+from master.libs.fastapi_amis_admin.admin import (
+    AdminAction,
+    AdminApp,
+    AutoTimeModelAdmin,
+    FieldPermEnum,
+    FootableModelAdmin,
+    FormAdmin,
+    PageSchemaAdmin,
+    ReadOnlyModelAdmin,
+    SoftDeleteModelAdmin,
+)
+from master.libs.fastapi_amis_admin.amis.components import (
+    Action,
+    ActionType,
+    ButtonToolbar,
+    Form,
+    Grid,
+    Horizontal,
+    Html,
+    Page,
+    PageSchema,
+)
+from master.libs.fastapi_amis_admin.amis.constants import DisplayModeEnum, LevelEnum
+from master.libs.fastapi_amis_admin.crud.base import SchemaUpdateT
+from master.libs.fastapi_amis_admin.crud.schema import BaseApiOut
+from master.libs.fastapi_amis_admin.utils.pydantic import model_fields
+from master.libs.fastapi_amis_admin.utils.translation import i18n as _
 
 
 def attach_page_head(page: Page) -> Page:
-    desc = _("Amis is a low-code front-end framework that reduces page development effort and greatly improves efficiency")
+    desc = _(
+        "Amis is a low-code front-end framework that reduces page development effort and greatly improves efficiency"
+    )
     page.body = [
         Html(
             html=f'<div style="display: flex; justify-content: center; align-items: center; margin: 96px 0px 8px;">'
@@ -70,7 +72,11 @@ def attach_page_head(page: Page) -> Page:
             f'width: 48px;"><span style="font-size: 32px; font-weight: bold;">Amis Admin</span></div>'
             f'<div style="width: 100%; text-align: center; color: rgba(0, 0, 0, 0.45); margin-bottom: 40px;">{desc}</div>'
         ),
-        Grid(columns=[{"body": [page.body], "lg": 2, "md": 4, "valign": "middle"}], align="center", valign="middle"),
+        Grid(
+            columns=[{"body": [page.body], "lg": 2, "md": 4, "valign": "middle"}],
+            align="center",
+            valign="middle",
+        ),
     ]
     return page
 
@@ -88,7 +94,9 @@ class UserLoginFormAdmin(FormAdmin):
     @property
     def route_submit(self):
         async def route(request: Request, response: Response, data: self.schema):  # type: ignore
-            return await request.auth.request_login(request, response, data.username, data.password)
+            return await request.auth.request_login(
+                request, response, data.username, data.password
+            )
 
         return route
 
@@ -103,7 +111,9 @@ class UserLoginFormAdmin(FormAdmin):
                     label=_("Sign up"),
                 )
             )
-        buttons.append(Action(actionType="submit", label=_("Sign in"), level=LevelEnum.primary))
+        buttons.append(
+            Action(actionType="submit", label=_("Sign in"), level=LevelEnum.primary)
+        )
         form.body.sort(key=lambda form_item: form_item.type, reverse=True)
         form.update_from_kwargs(
             title="",
@@ -135,7 +145,9 @@ class UserLoginFormAdmin(FormAdmin):
 
         return route
 
-    async def has_page_permission(self, request: Request, obj: PageSchemaAdmin = None, action: str = None) -> bool:
+    async def has_page_permission(
+        self, request: Request, obj: PageSchemaAdmin = None, action: str = None
+    ) -> bool:
         return True
 
 
@@ -150,18 +162,30 @@ class UserRegFormAdmin(FormAdmin):
     page_schema = None
     page_route_kwargs = {"name": "reg"}
 
-    async def handle(self, request: Request, data: SchemaUpdateT, **kwargs) -> BaseApiOut[BaseModel]:  # self.schema_submit_out
+    async def handle(
+        self, request: Request, data: SchemaUpdateT, **kwargs
+    ) -> BaseApiOut[BaseModel]:  # self.schema_submit_out
         auth: Auth = request.auth
         if data.username.upper() in SystemUserEnum.__members__:
-            return BaseApiOut(status=-1, msg=_("Username has been registered!"), data=None)
-        user = await auth.db.async_scalar(select(self.user_model).where(self.user_model.username == data.username))
+            return BaseApiOut(
+                status=-1, msg=_("Username has been registered!"), data=None
+            )
+        user = await auth.db.async_scalar(
+            select(self.user_model).where(self.user_model.username == data.username)
+        )
         if user:
-            return BaseApiOut(status=-1, msg=_("Username has been registered!"), data=None)
-        user = await auth.db.async_scalar(select(self.user_model).where(self.user_model.email == data.email))
+            return BaseApiOut(
+                status=-1, msg=_("Username has been registered!"), data=None
+            )
+        user = await auth.db.async_scalar(
+            select(self.user_model).where(self.user_model.email == data.email)
+        )
         if user:
             return BaseApiOut(status=-2, msg=_("Email has been registered!"), data=None)
         values = data.model_dump(exclude={"id", "password"})
-        values["password"] = auth.pwd_context.hash(data.password.get_secret_value())  # 密码hash保存
+        values["password"] = auth.pwd_context.hash(
+            data.password.get_secret_value()
+        )  # 密码hash保存
         user = self.user_model.model_validate(values)
         try:
             auth.db.add(user)
@@ -173,14 +197,20 @@ class UserRegFormAdmin(FormAdmin):
             ) from e
         # 注册成功,设置用户信息
         token_info = self.schema_submit_out.model_validate(user)
-        token_info.access_token = await auth.backend.token_store.write_token(user.model_dump())
+        token_info.access_token = await auth.backend.token_store.write_token(
+            user.model_dump()
+        )
         return BaseApiOut(code=0, msg=_("Registered successfully!"), data=token_info)
 
     @property
     def route_submit(self):
-        async def route(response: Response, result: BaseApiOut = Depends(super().route_submit)):
+        async def route(
+            response: Response, result: BaseApiOut = Depends(super().route_submit)
+        ):
             if result.status == 0 and result.code == 0:  # 登录成功,设置用户信息
-                response.set_cookie("Authorization", f"bearer {result.data.access_token}")
+                response.set_cookie(
+                    "Authorization", f"bearer {result.data.access_token}"
+                )
             return result
 
         return route
@@ -204,7 +234,11 @@ class UserRegFormAdmin(FormAdmin):
                             link=f"{self.router_path}/login",
                             label=_("Sign in"),
                         ),
-                        Action(actionType="submit", label=_("Sign up"), level=LevelEnum.primary),
+                        Action(
+                            actionType="submit",
+                            label=_("Sign up"),
+                            level=LevelEnum.primary,
+                        ),
                     ]
                 )
             ],
@@ -216,7 +250,9 @@ class UserRegFormAdmin(FormAdmin):
         page = await super().get_page(request)
         return attach_page_head(page)
 
-    async def has_page_permission(self, request: Request, obj: PageSchemaAdmin = None, action: str = None) -> bool:
+    async def has_page_permission(
+        self, request: Request, obj: PageSchemaAdmin = None, action: str = None
+    ) -> bool:
         return True
 
 
@@ -242,10 +278,16 @@ class UserInfoFormAdmin(FormAdmin):
             for k, modelfield in model_fields(self.user_model).items()
             if k not in model_fields(self.schema).keys() | {"delete_time"}
         ]
-        form.body.extend(formitem.update_from_kwargs(disabled=True) for formitem in formitems if formitem)
+        form.body.extend(
+            formitem.update_from_kwargs(disabled=True)
+            for formitem in formitems
+            if formitem
+        )
         return form
 
-    async def handle(self, request: Request, data: SchemaUpdateT, **kwargs) -> BaseApiOut[Any]:
+    async def handle(
+        self, request: Request, data: SchemaUpdateT, **kwargs
+    ) -> BaseApiOut[Any]:
         for k, v in data.model_dump(exclude_none=True).items():
             if k == "password":
                 if not v:
@@ -254,11 +296,15 @@ class UserInfoFormAdmin(FormAdmin):
             setattr(request.user, k, v)
         return BaseApiOut(data=request.user.model_dump(exclude={"password"}))
 
-    async def has_page_permission(self, request: Request, obj: PageSchemaAdmin = None, action: str = None) -> bool:
+    async def has_page_permission(
+        self, request: Request, obj: PageSchemaAdmin = None, action: str = None
+    ) -> bool:
         return await self.site.auth.requires(response=False)(request)
 
 
-class UserAdmin(AuthFieldModelAdmin, AuthSelectModelAdmin, SoftDeleteModelAdmin, FootableModelAdmin):
+class UserAdmin(
+    AuthFieldModelAdmin, AuthSelectModelAdmin, SoftDeleteModelAdmin, FootableModelAdmin
+):
     unique_id = "Auth>UserAdmin"
     page_schema = PageSchema(label=_("User"), icon="fa fa-user")
     model: Type[BaseUser] = None
@@ -283,7 +329,7 @@ class UserAdmin(AuthFieldModelAdmin, AuthSelectModelAdmin, SoftDeleteModelAdmin,
             name="update_subject_roles",
             tooltip=_("Update user role"),
             icon="fa fa-user",
-            flags="item"
+            flags="item",
             # 更新用户角色
         ),
         lambda admin: CopyUserAuthLinkAction(admin),
@@ -314,8 +360,12 @@ class UserAdmin(AuthFieldModelAdmin, AuthSelectModelAdmin, SoftDeleteModelAdmin,
         data["password"] = request.auth.get_password_hash(data["password"])
         return data
 
-    async def on_update_pre(self, request: Request, obj, item_id: List[int], **kwargs) -> Dict[str, Any]:
-        data = await super(UserAdmin, self).on_update_pre(request, obj, item_id, **kwargs)
+    async def on_update_pre(
+        self, request: Request, obj, item_id: List[int], **kwargs
+    ) -> Dict[str, Any]:
+        data = await super(UserAdmin, self).on_update_pre(
+            request, obj, item_id, **kwargs
+        )
         if data.get("password", None):
             data["password"] = request.auth.get_password_hash(data["password"])
         return data
@@ -345,7 +395,7 @@ class RoleAdmin(AutoTimeModelAdmin, FootableModelAdmin):
             name="update_subject_roles",
             tooltip=_("Update sub-roles"),
             icon="fa fa-user",
-            flags="item"
+            flags="item",
             # 更新子角色
         ),
     ]
@@ -360,7 +410,10 @@ class RoleAdmin(AutoTimeModelAdmin, FootableModelAdmin):
 
     async def get_select(self, request: Request) -> Select:
         sel = await super().get_select(request)
-        sel = sel.outerjoin(CasbinSubjectRolesQuery, CasbinSubjectRolesQuery.c.subject == "r:" + Role.key)
+        sel = sel.outerjoin(
+            CasbinSubjectRolesQuery,
+            CasbinSubjectRolesQuery.c.subject == "r:" + Role.key,
+        )
         return sel
 
 
@@ -368,7 +421,15 @@ class CasbinRuleAdmin(ReadOnlyModelAdmin):
     unique_id = "Auth>CasbinRuleAdmin"
     page_schema = PageSchema(label="CasbinRule", icon="fa fa-lock")
     model = CasbinRule
-    list_filter = [CasbinRule.ptype, CasbinRule.v0, CasbinRule.v1, CasbinRule.v2, CasbinRule.v3, CasbinRule.v4, CasbinRule.v5]
+    list_filter = [
+        CasbinRule.ptype,
+        CasbinRule.v0,
+        CasbinRule.v1,
+        CasbinRule.v2,
+        CasbinRule.v3,
+        CasbinRule.v4,
+        CasbinRule.v5,
+    ]
     admin_action_maker = [
         lambda admin: AdminAction(
             admin=admin,
@@ -409,7 +470,12 @@ class LoginHistoryAdmin(ReadOnlyModelAdmin):
     unique_id = "Auth>LoginHistoryAdmin"
     page_schema = PageSchema(label=_("Login history"), icon="fa fa-history")  # 登录历史
     model = LoginHistory
-    search_fields = [LoginHistory.login_name, LoginHistory.ip, LoginHistory.login_status, LoginHistory.user_agent]
+    search_fields = [
+        LoginHistory.login_name,
+        LoginHistory.ip,
+        LoginHistory.login_status,
+        LoginHistory.user_agent,
+    ]
     list_display = [
         User.nickname,
         LoginHistory.login_name,

@@ -6,16 +6,38 @@ from sqlalchemy.engine import Result
 from sqlalchemy.sql import Select
 from starlette.requests import Request
 
-from fastapi_amis_admin.admin.admin import AdminAction, AdminApp, FormAdmin, ModelAdmin
-from fastapi_amis_admin.admin.extensions.schemas import FieldPermEnum, SelectPerm
-from fastapi_amis_admin.admin.extensions.utils import get_schema_fields_name_label
-from fastapi_amis_admin.amis import FormItem, SchemaNode, TableColumn, TableCRUD
-from fastapi_amis_admin.crud.base import ItemListSchema, SchemaCreateT, SchemaFilterT, SchemaModelT, SchemaReadT, SchemaUpdateT
-from fastapi_amis_admin.crud.parser import TableModelT
-from fastapi_amis_admin.crud.schema import CrudEnum
-from fastapi_amis_admin.utils.functools import cached_property
-from fastapi_amis_admin.utils.pydantic import ModelField
-from fastapi_amis_admin.utils.translation import i18n as _
+from master.libs.fastapi_amis_admin.admin.admin import (
+    AdminAction,
+    AdminApp,
+    FormAdmin,
+    ModelAdmin,
+)
+from master.libs.fastapi_amis_admin.admin.extensions.schemas import (
+    FieldPermEnum,
+    SelectPerm,
+)
+from master.libs.fastapi_amis_admin.admin.extensions.utils import (
+    get_schema_fields_name_label,
+)
+from master.libs.fastapi_amis_admin.amis import (
+    FormItem,
+    SchemaNode,
+    TableColumn,
+    TableCRUD,
+)
+from master.libs.fastapi_amis_admin.crud.base import (
+    ItemListSchema,
+    SchemaCreateT,
+    SchemaFilterT,
+    SchemaModelT,
+    SchemaReadT,
+    SchemaUpdateT,
+)
+from master.libs.fastapi_amis_admin.crud.parser import TableModelT
+from master.libs.fastapi_amis_admin.crud.schema import CrudEnum
+from master.libs.fastapi_amis_admin.utils.functools import cached_property
+from master.libs.fastapi_amis_admin.utils.pydantic import ModelField
+from master.libs.fastapi_amis_admin.utils.translation import i18n as _
 
 
 class ReadOnlyModelAdmin(ModelAdmin):
@@ -29,10 +51,20 @@ class ReadOnlyModelAdmin(ModelAdmin):
         return {
             key: action
             for key, action in actions.items()
-            if key not in {"create", "update", "delete", "bulk_delete", "bulk_update", "bulk_create"}
+            if key
+            not in {
+                "create",
+                "update",
+                "delete",
+                "bulk_delete",
+                "bulk_update",
+                "bulk_create",
+            }
         }
 
-    async def has_create_permission(self, request: Request, data: SchemaUpdateT, **kwargs) -> bool:
+    async def has_create_permission(
+        self, request: Request, data: SchemaUpdateT, **kwargs
+    ) -> bool:
         return False
 
     async def has_update_permission(
@@ -44,7 +76,9 @@ class ReadOnlyModelAdmin(ModelAdmin):
     ) -> bool:
         return False
 
-    async def has_delete_permission(self, request: Request, item_id: List[str], **kwargs) -> bool:
+    async def has_delete_permission(
+        self, request: Request, item_id: List[str], **kwargs
+    ) -> bool:
         return False
 
 
@@ -72,7 +106,9 @@ class SoftDeleteModelAdmin(AutoTimeModelAdmin):
 
     def __init__(self, app: "AdminApp"):
         super().__init__(app)
-        assert hasattr(self.model, "delete_time"), "SoftDeleteModelAdmin需要在模型中定义delete_time字段"
+        assert hasattr(self.model, "delete_time"), (
+            "SoftDeleteModelAdmin需要在模型中定义delete_time字段"
+        )
 
     async def get_select(self, request: Request):
         sel = await super().get_select(request)
@@ -125,7 +161,11 @@ class BaseAuthFieldModelAdmin(ModelAdmin):
         """获取权限字段"""
         info = {
             "list": (self.schema_list, _("List display") + "-", FieldPermEnum.LIST),
-            "filter": (self.schema_filter, _("List filter") + "-", FieldPermEnum.FILTER),
+            "filter": (
+                self.schema_filter,
+                _("List filter") + "-",
+                FieldPermEnum.FILTER,
+            ),
             "create": (self.schema_create, _("Create") + "-", FieldPermEnum.CREATE),
             "read": (self.schema_read, _("Read") + "-", FieldPermEnum.READ),
             "update": (self.schema_update, _("Update") + "-", FieldPermEnum.UPDATE),
@@ -143,7 +183,13 @@ class BaseAuthFieldModelAdmin(ModelAdmin):
         for k, fields in perm_fields.items():
             if (k & perm) == perm:
                 include.update(set(fields))
-        return get_schema_fields_name_label(schema, prefix=prefix, exclude_required=True, exclude=exclude, include=include)
+        return get_schema_fields_name_label(
+            schema,
+            prefix=prefix,
+            exclude_required=True,
+            exclude=exclude,
+            include=include,
+        )
 
     @cached_property
     def create_permission_fields(self) -> Dict[str, str]:
@@ -170,7 +216,9 @@ class BaseAuthFieldModelAdmin(ModelAdmin):
         """过滤筛选权限字段"""
         return self.get_permission_fields("filter")
 
-    async def has_field_permission(self, request: Request, field: str, action: str = "") -> bool:
+    async def has_field_permission(
+        self, request: Request, field: str, action: str = ""
+    ) -> bool:
         """判断用户是否有字段权限"""
         return True
 
@@ -193,41 +241,61 @@ class BaseAuthFieldModelAdmin(ModelAdmin):
             check_fields = self.read_permission_fields.keys()
         else:
             pass
-        fields = {field for field in check_fields if not await self.has_field_permission(request, field, action)}
+        fields = {
+            field
+            for field in check_fields
+            if not await self.has_field_permission(request, field, action)
+        }
         request_cache[action] = fields
         if cache_key not in request.scope:
             request.scope[cache_key] = request_cache
         return fields
 
-    async def on_list_after(self, request: Request, result: Result, data: ItemListSchema, **kwargs) -> ItemListSchema:
+    async def on_list_after(
+        self, request: Request, result: Result, data: ItemListSchema, **kwargs
+    ) -> ItemListSchema:
         """Parse the database data query result dictionary into schema_list."""
         exclude = await self.get_deny_fields(request, "list")  # 过滤没有权限的字段
         data = await super().on_list_after(request, result, data, **kwargs)
-        data.items = [item.model_dump(exclude=exclude) for item in data.items]  # 过滤没有权限的字段
+        data.items = [
+            item.model_dump(exclude=exclude) for item in data.items
+        ]  # 过滤没有权限的字段
         return data
 
-    async def on_filter_pre(self, request: Request, obj: Optional[SchemaFilterT], **kwargs) -> Dict[str, Any]:
+    async def on_filter_pre(
+        self, request: Request, obj: Optional[SchemaFilterT], **kwargs
+    ) -> Dict[str, Any]:
         data = await super().on_filter_pre(request, obj, **kwargs)
         if not data:
             return data
         exclude = await self.get_deny_fields(request, "filter")  # 过滤没有权限的字段
         return {k: v for k, v in data.items() if k not in exclude}
 
-    async def create_items(self, request: Request, items: List[SchemaCreateT]) -> List[TableModelT]:
+    async def create_items(
+        self, request: Request, items: List[SchemaCreateT]
+    ) -> List[TableModelT]:
         """Create multiple data"""
         exclude = await self.get_deny_fields(request, "create")
         # pydantic v2: `model_copy` no longer supports `exclude`. Reconstruct the
         # instance from a filtered dump so denied fields fall back to defaults and
         # are not reported as explicitly set (matches v1 `copy(exclude=...)`).
-        items = [type(item).model_construct(**item.model_dump(exclude=exclude)) for item in items]  # 过滤没有权限的字段
+        items = [
+            type(item).model_construct(**item.model_dump(exclude=exclude))
+            for item in items
+        ]  # 过滤没有权限的字段
         items = await super().create_items(request, items)
         return items
 
-    async def read_items(self, request: Request, item_id: List[str]) -> List[SchemaReadT]:
+    async def read_items(
+        self, request: Request, item_id: List[str]
+    ) -> List[SchemaReadT]:
         """Read multiple data"""
         items = await super().read_items(request, item_id)
         exclude = await self.get_deny_fields(request, "read")  # 过滤没有权限的字段
-        return [type(item).model_construct(**item.model_dump(exclude=exclude)) for item in items]
+        return [
+            type(item).model_construct(**item.model_dump(exclude=exclude))
+            for item in items
+        ]
 
     async def on_update_pre(
         self,
@@ -237,7 +305,9 @@ class BaseAuthFieldModelAdmin(ModelAdmin):
         **kwargs,
     ) -> Dict[str, Any]:
         exclude = await self.get_deny_fields(request, "update")  # 过滤没有权限的字段
-        obj = type(obj).model_construct(**obj.model_dump(exclude=exclude))  # 过滤没有权限的字段
+        obj = type(obj).model_construct(
+            **obj.model_dump(exclude=exclude)
+        )  # 过滤没有权限的字段
         data = await super().on_update_pre(request, obj, item_id, **kwargs)
         return data
 
@@ -254,7 +324,9 @@ class BaseAuthFieldModelAdmin(ModelAdmin):
         form_item = await super().get_form_item(request, modelfield, action)
         return form_item
 
-    async def get_list_column(self, request: Request, modelfield: ModelField) -> Optional[TableColumn]:
+    async def get_list_column(
+        self, request: Request, modelfield: ModelField
+    ) -> Optional[TableColumn]:
         """过滤前端展示字段"""
         exclude = await self.get_deny_fields(request, "list")  # 获取没有权限的字段
         name = modelfield.alias or modelfield.name

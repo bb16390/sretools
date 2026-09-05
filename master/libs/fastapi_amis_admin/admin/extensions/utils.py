@@ -2,7 +2,7 @@ from typing import Dict, Iterable, Type
 
 from pydantic import BaseModel
 
-from fastapi_amis_admin.utils.pydantic import model_fields
+from master.libs.fastapi_amis_admin.utils.pydantic import model_fields
 
 
 def get_schema_fields_name_label(
