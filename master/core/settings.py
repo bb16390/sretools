@@ -35,8 +35,8 @@ class Settings(admin.Settings):
     static_dir: str = os.path.join(MASTER_DIR, "static")
     # 日志配置
     log_level: str = "INFO"
-    log_dir: str = os.path.join(MASTER_DIR, "log", "uvicorn.log")
-    error_log_dir: str = os.path.join(MASTER_DIR, "log", "uvicorn-error.log")
+    log_dir: str = os.path.join(MASTER_DIR, "logs", "uvicorn.log")
+    error_log_dir: str = os.path.join(MASTER_DIR, "logs", "uvicorn-error.log")
     log_format: str = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     template_name: str = os.path.join(MASTER_DIR, "templates")
     # 安全配置

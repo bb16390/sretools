@@ -32,8 +32,8 @@ class Settings:
     
     # 日志配置
     log_level: str = "DEBUG"
-    log_dir: str = os.path.join(BASE_DIR, "log", "worker.log")
-    error_log_dir: str = os.path.join(BASE_DIR, "log", "worker-error.log")
+    log_dir: str = os.path.join(BASE_DIR, "logs", "worker.log")
+    error_log_dir: str = os.path.join(BASE_DIR, "logs", "worker-error.log")
     
     # 日志收集配置
     log_collect_interval: int = 5  # 秒
