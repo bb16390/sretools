@@ -1,10 +1,10 @@
 import os
 
-from fastapi_amis_admin.amis.components import App, Grid, Html, Page
-from fastapi_amis_admin.utils.translation import i18n as _
-from fastapi_user_auth.admin import AuthAdminSite
-import fastapi_user_auth.admin as _fua_pkg
-import fastapi_user_auth.admin.admin as _fua_admin
+from master.libs.fastapi_amis_admin.amis.components import App, Grid, Html, Page
+from master.libs.fastapi_amis_admin.utils.translation import i18n as _
+from master.libs.fastapi_user_auth.admin import AuthAdminSite
+import master.libs.fastapi_user_auth.admin as _fua_pkg
+import master.libs.fastapi_user_auth.admin.admin as _fua_admin
 
 from master.core.settings import settings
 

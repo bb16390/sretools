@@ -5,27 +5,12 @@
 - 执行日志（ModelAdmin）：查询 + 详情
 - 仪表盘（PageAdmin）：快速统计与快捷操作
 """
+
 from __future__ import annotations
 
 from typing import Any
 
-from fastapi_amis_admin import admin, amis
-from fastapi_amis_admin.admin import AdminApp
-from fastapi_amis_admin.amis import (
-    ActionType,
-    Form,
-    Grid,
-    LevelEnum,
-    Page,
-    PageSchema,
-    Tabs,
-)
-from fastapi_amis_admin.amis.components import ColumnOperation, GridColumn, TableCRUD
-from fastapi_amis_admin.crud import BaseApiOut
-from sqlalchemy import desc, func, select
-from starlette.requests import Request
-
-from .core.models import (
+from master.core.models import (
     CollectorLog,
     CollectorTask,
     CollectorType,
@@ -34,6 +19,25 @@ from .core.models import (
     StorageType,
     TaskStatus,
 )
+from sqlalchemy import desc, func, select
+from starlette.requests import Request
+
+from master.libs.fastapi_amis_admin import admin, amis
+from master.libs.fastapi_amis_admin.admin import AdminApp
+from master.libs.fastapi_amis_admin.amis import (
+    ActionType,
+    LevelEnum,
+    Page,
+    PageSchema,
+    Tabs,
+)
+from master.libs.fastapi_amis_admin.amis.components import (
+    ColumnOperation,
+    Form,
+    Grid,
+    TableCRUD,
+)
+from master.libs.fastapi_amis_admin.crud import BaseApiOut
 
 # 全局调度器引用，在 api.py / main.py 启动时设置
 _scheduler_ref: list[Any] = [None]
@@ -77,36 +81,62 @@ class CollectorDashboardAdmin(admin.PageAdmin):
     async def get_page(self, request: Request) -> Page:  # type: ignore[override]
         # 统计数
         async with self.db.async_session() as sess:
-            total_tasks = (await sess.execute(
-                select(func.count(CollectorTask.id))
-            )).scalar_one()
-            enabled_tasks = (await sess.execute(
-                select(func.count(CollectorTask.id)).where(CollectorTask.enabled.is_(True))
-            )).scalar_one()
-            total_logs = (await sess.execute(
-                select(func.count(CollectorLog.id))
-            )).scalar_one()
-            success_logs_24h = (await sess.execute(
-                select(func.count(CollectorLog.id)).where(
-                    CollectorLog.status == ExecStatus.SUCCESS,
+            total_tasks = (
+                await sess.execute(select(func.count(CollectorTask.id)))
+            ).scalar_one()
+            enabled_tasks = (
+                await sess.execute(
+                    select(func.count(CollectorTask.id)).where(
+                        CollectorTask.enabled.is_(True)
+                    )
                 )
-            )).scalar_one()
+            ).scalar_one()
+            total_logs = (
+                await sess.execute(select(func.count(CollectorLog.id)))
+            ).scalar_one()
+            success_logs_24h = (
+                await sess.execute(
+                    select(func.count(CollectorLog.id)).where(
+                        CollectorLog.status == ExecStatus.SUCCESS,
+                    )
+                )
+            ).scalar_one()
             # 最近 10 条日志
-            recent = (await sess.execute(
-                select(CollectorLog).order_by(desc(CollectorLog.started_at)).limit(10)
-            )).scalars().all()
+            recent = (
+                (
+                    await sess.execute(
+                        select(CollectorLog)
+                        .order_by(desc(CollectorLog.started_at))
+                        .limit(10)
+                    )
+                )
+                .scalars()
+                .all()
+            )
             # 最近任务
-            tasks = (await sess.execute(
-                select(CollectorTask).order_by(desc(CollectorTask.updated_at)).limit(5)
-            )).scalars().all()
+            tasks = (
+                (
+                    await sess.execute(
+                        select(CollectorTask)
+                        .order_by(desc(CollectorTask.updated_at))
+                        .limit(5)
+                    )
+                )
+                .scalars()
+                .all()
+            )
 
         recent_rows = [
             {
                 "id": item.id,
                 "task_id": item.task_id,
                 "trigger": item.trigger,
-                "status": item.status.value if hasattr(item.status, "value") else str(item.status),
-                "started_at": item.started_at.strftime("%Y-%m-%d %H:%M:%S") if item.started_at else "",
+                "status": item.status.value
+                if hasattr(item.status, "value")
+                else str(item.status),
+                "started_at": item.started_at.strftime("%Y-%m-%d %H:%M:%S")
+                if item.started_at
+                else "",
                 "duration_ms": item.duration_ms,
                 "rows_count": item.rows_count,
                 "error": (item.error_message or "")[:80],
@@ -117,41 +147,69 @@ class CollectorDashboardAdmin(admin.PageAdmin):
             {
                 "id": t.id,
                 "name": t.name,
-                "collector_type": t.collector_type.value if hasattr(t.collector_type, "value") else str(t.collector_type),
-                "storage_type": t.storage_type.value if hasattr(t.storage_type, "value") else str(t.storage_type),
+                "collector_type": t.collector_type.value
+                if hasattr(t.collector_type, "value")
+                else str(t.collector_type),
+                "storage_type": t.storage_type.value
+                if hasattr(t.storage_type, "value")
+                else str(t.storage_type),
                 "enabled": t.enabled,
-                "status": t.status.value if hasattr(t.status, "value") else str(t.status),
+                "status": t.status.value
+                if hasattr(t.status, "value")
+                else str(t.status),
                 "success": t.total_success_count,
                 "failed": t.total_failed_count,
-                "last_run": t.last_run_at.strftime("%m-%d %H:%M:%S") if t.last_run_at else "-",
+                "last_run": t.last_run_at.strftime("%m-%d %H:%M:%S")
+                if t.last_run_at
+                else "-",
             }
             for t in tasks
         ]
 
         def stat_card(label, value, icon, color):
             return amis.Card(
-                    header=amis.CardHeader(title=label),
-                    body=[
-                        amis.Tpl(
-                            tpl=(
-                                f'<div style="display:flex;align-items:center;gap:12px">'
-                                f'<i class="fa {icon} fa-3x" style="color:{color}"></i>'
-                                f'<span style="font-size:32px;font-weight:700">{value}</span>'
-                                f'</div>'
-                            ),
+                header=amis.CardHeader(title=label),
+                body=[
+                    amis.Tpl(
+                        tpl=(
+                            f'<div style="display:flex;align-items:center;gap:12px">'
+                            f'<i class="fa {icon} fa-3x" style="color:{color}"></i>'
+                            f'<span style="font-size:32px;font-weight:700">{value}</span>'
+                            f"</div>"
                         ),
-                    ],
-                )
+                    ),
+                ],
+            )
 
         return amis.Page(
             title="采集仪表盘",
             body=[
                 Grid(
                     columns=[
-                        GridColumn(body=stat_card("任务总数", total_tasks, "fa-tasks", "#2f54eb"), md=3),
-                        GridColumn(body=stat_card("已启用", enabled_tasks, "fa-check-circle", "#52c41a"), md=3),
-                        GridColumn(body=stat_card("总执行次数", total_logs, "fa-list-alt", "#1890ff"), md=3),
-                        GridColumn(body=stat_card("成功次数", success_logs_24h, "fa-smile", "#faad14"), md=3),
+                        Grid.Column(
+                            body=stat_card(
+                                "任务总数", total_tasks, "fa-tasks", "#2f54eb"
+                            ),
+                            md=3,
+                        ),
+                        Grid.Column(
+                            body=stat_card(
+                                "已启用", enabled_tasks, "fa-check-circle", "#52c41a"
+                            ),
+                            md=3,
+                        ),
+                        Grid.Column(
+                            body=stat_card(
+                                "总执行次数", total_logs, "fa-list-alt", "#1890ff"
+                            ),
+                            md=3,
+                        ),
+                        Grid.Column(
+                            body=stat_card(
+                                "成功次数", success_logs_24h, "fa-smile", "#faad14"
+                            ),
+                            md=3,
+                        ),
                     ],
                 ),
                 amis.Divider(),
@@ -162,10 +220,16 @@ class CollectorDashboardAdmin(admin.PageAdmin):
                             tab=amis.Table(
                                 columns=[
                                     amis.TableColumn(name="name", label="名称"),
-                                    amis.TableColumn(name="collector_type", label="采集"),
+                                    amis.TableColumn(
+                                        name="collector_type", label="采集"
+                                    ),
                                     amis.TableColumn(name="storage_type", label="存储"),
-                                    amis.TableColumn(name="enabled", label="启用", type="mapping",
-                                                     map={"true": "是", "false": "否"}),
+                                    amis.TableColumn(
+                                        name="enabled",
+                                        label="启用",
+                                        type="mapping",
+                                        map={"true": "是", "false": "否"},
+                                    ),
                                     amis.TableColumn(name="status", label="状态"),
                                     amis.TableColumn(name="success", label="成功"),
                                     amis.TableColumn(name="failed", label="失败"),
@@ -181,14 +245,22 @@ class CollectorDashboardAdmin(admin.PageAdmin):
                                     amis.TableColumn(name="id", label="ID"),
                                     amis.TableColumn(name="task_id", label="任务ID"),
                                     amis.TableColumn(name="trigger", label="触发"),
-                                    amis.TableColumn(name="status", label="状态", type="mapping",
-                                                     map={
-                                                         "success": '<span class="label label-success">成功</span>',
-                                                         "failed": '<span class="label label-danger">失败</span>',
-                                                         "running": '<span class="label label-info">运行中</span>',
-                                                     }),
-                                    amis.TableColumn(name="started_at", label="开始时间"),
-                                    amis.TableColumn(name="duration_ms", label="耗时(ms)"),
+                                    amis.TableColumn(
+                                        name="status",
+                                        label="状态",
+                                        type="mapping",
+                                        map={
+                                            "success": '<span class="label label-success">成功</span>',
+                                            "failed": '<span class="label label-danger">失败</span>',
+                                            "running": '<span class="label label-info">运行中</span>',
+                                        },
+                                    ),
+                                    amis.TableColumn(
+                                        name="started_at", label="开始时间"
+                                    ),
+                                    amis.TableColumn(
+                                        name="duration_ms", label="耗时(ms)"
+                                    ),
                                     amis.TableColumn(name="rows_count", label="行数"),
                                     amis.TableColumn(name="error", label="错误"),
                                 ],
@@ -236,9 +308,9 @@ _STATUS_TPL = (
     '<span class="label label-default">已停止</span>'
     '<% } else if (this.status === "error") { %>'
     '<span class="label label-danger">异常</span>'
-    '<% } else { %>'
+    "<% } else { %>"
     '<span class="label label-info">等待调度</span>'
-    '<% } %>'
+    "<% } %>"
 )
 
 
@@ -375,6 +447,7 @@ class CollectorTaskAdmin(admin.ModelAdmin):
                 await scheduler.add_or_update_job(obj)
             except Exception:  # noqa: BLE001
                 import logging as _log
+
                 _log.getLogger(__name__).exception("schedule task created failed")
                 async with self.db.async_session() as sess:
                     obj.status = TaskStatus.ERROR
@@ -389,6 +462,7 @@ class CollectorTaskAdmin(admin.ModelAdmin):
                 await scheduler.add_or_update_job(obj)
             except Exception:  # noqa: BLE001
                 import logging as _log
+
                 _log.getLogger(__name__).exception("schedule task updated failed")
                 async with self.db.async_session() as sess:
                     obj.status = TaskStatus.ERROR
@@ -411,9 +485,11 @@ class CollectorTaskAdmin(admin.ModelAdmin):
         @self.router.post("/{task_id}/enable")
         async def enable_task(task_id: str):
             async with self.db.async_session() as sess:
-                task = (await sess.execute(
-                    select(CollectorTask).where(CollectorTask.id == task_id)
-                )).scalar_one_or_none()
+                task = (
+                    await sess.execute(
+                        select(CollectorTask).where(CollectorTask.id == task_id)
+                    )
+                ).scalar_one_or_none()
                 if task is None:
                     return BaseApiOut(status=-1, msg="task not found")
                 task.enabled = True
@@ -428,9 +504,11 @@ class CollectorTaskAdmin(admin.ModelAdmin):
         @self.router.post("/{task_id}/disable")
         async def disable_task(task_id: str):
             async with self.db.async_session() as sess:
-                task = (await sess.execute(
-                    select(CollectorTask).where(CollectorTask.id == task_id)
-                )).scalar_one_or_none()
+                task = (
+                    await sess.execute(
+                        select(CollectorTask).where(CollectorTask.id == task_id)
+                    )
+                ).scalar_one_or_none()
                 if task is None:
                     return BaseApiOut(status=-1, msg="task not found")
                 task.enabled = False
@@ -445,9 +523,11 @@ class CollectorTaskAdmin(admin.ModelAdmin):
         @self.router.post("/{task_id}/pause")
         async def pause_task(task_id: str):
             async with self.db.async_session() as sess:
-                task = (await sess.execute(
-                    select(CollectorTask).where(CollectorTask.id == task_id)
-                )).scalar_one_or_none()
+                task = (
+                    await sess.execute(
+                        select(CollectorTask).where(CollectorTask.id == task_id)
+                    )
+                ).scalar_one_or_none()
                 if task is None:
                     return BaseApiOut(status=-1, msg="task not found")
             sched = _get_scheduler()
@@ -459,9 +539,11 @@ class CollectorTaskAdmin(admin.ModelAdmin):
         @self.router.post("/{task_id}/resume")
         async def resume_task(task_id: str):
             async with self.db.async_session() as sess:
-                task = (await sess.execute(
-                    select(CollectorTask).where(CollectorTask.id == task_id)
-                )).scalar_one_or_none()
+                task = (
+                    await sess.execute(
+                        select(CollectorTask).where(CollectorTask.id == task_id)
+                    )
+                ).scalar_one_or_none()
                 if task is None:
                     return BaseApiOut(status=-1, msg="task not found")
             sched = _get_scheduler()
@@ -473,43 +555,56 @@ class CollectorTaskAdmin(admin.ModelAdmin):
         @self.router.post("/{task_id}/run")
         async def run_task(task_id: str):
             async with self.db.async_session() as sess:
-                task = (await sess.execute(
-                    select(CollectorTask).where(CollectorTask.id == task_id)
-                )).scalar_one_or_none()
+                task = (
+                    await sess.execute(
+                        select(CollectorTask).where(CollectorTask.id == task_id)
+                    )
+                ).scalar_one_or_none()
                 if task is None:
                     return BaseApiOut(status=-1, msg="task not found")
             sched = _get_scheduler()
             if sched is None:
                 return BaseApiOut(status=-1, msg="scheduler not ready")
             log_rec = await sched.run_task_manually(task_id)
-            return BaseApiOut(data={
-                "log_id": log_rec.id,
-                "status": log_rec.status.value if hasattr(log_rec.status, "value") else str(log_rec.status),
-                "duration_ms": log_rec.duration_ms,
-                "rows_count": log_rec.rows_count,
-                "error_message": log_rec.error_message,
-            }, msg="manual run triggered")
+            return BaseApiOut(
+                data={
+                    "log_id": log_rec.id,
+                    "status": log_rec.status.value
+                    if hasattr(log_rec.status, "value")
+                    else str(log_rec.status),
+                    "duration_ms": log_rec.duration_ms,
+                    "rows_count": log_rec.rows_count,
+                    "error_message": log_rec.error_message,
+                },
+                msg="manual run triggered",
+            )
 
         @self.router.get("/form_templates")
         async def get_form_templates():
-            return BaseApiOut(data={
-                "collector": {
-                    CollectorType.DATABASE.value: {"url": "", "query": ""},
-                    CollectorType.HTTP.value: {"url": "", "method": "GET"},
-                    CollectorType.WEBSOCKET.value: {"uri": "", "message_count": 1, "duration": 10},
-                },
-                "storage": {
-                    StorageType.DATABASE.value: {"url": "", "table": ""},
-                    StorageType.HTTP.value: {"url": "", "method": "POST"},
-                    StorageType.FILE.value: {"path": "", "format": "jsonl"},
-                    StorageType.KAFKA.value: {"bootstrap_servers": "", "topic": ""},
-                },
-                "schedule": {
-                    ScheduleType.CRON.value: {"expression": "*/5 * * * *"},
-                    ScheduleType.INTERVAL.value: {"seconds": 60},
-                    ScheduleType.DATE.value: {"run_date": ""},
-                },
-            })
+            return BaseApiOut(
+                data={
+                    "collector": {
+                        CollectorType.DATABASE.value: {"url": "", "query": ""},
+                        CollectorType.HTTP.value: {"url": "", "method": "GET"},
+                        CollectorType.WEBSOCKET.value: {
+                            "uri": "",
+                            "message_count": 1,
+                            "duration": 10,
+                        },
+                    },
+                    "storage": {
+                        StorageType.DATABASE.value: {"url": "", "table": ""},
+                        StorageType.HTTP.value: {"url": "", "method": "POST"},
+                        StorageType.FILE.value: {"path": "", "format": "jsonl"},
+                        StorageType.KAFKA.value: {"bootstrap_servers": "", "topic": ""},
+                    },
+                    "schedule": {
+                        ScheduleType.CRON.value: {"expression": "*/5 * * * *"},
+                        ScheduleType.INTERVAL.value: {"seconds": 60},
+                        ScheduleType.DATE.value: {"run_date": ""},
+                    },
+                }
+            )
 
         return super().register_router()
 
@@ -538,9 +633,9 @@ class CollectorLogAdmin(admin.ModelAdmin):
                 '<span class="label label-success">成功</span>'
                 '<% } else if (this.status === "failed") { %>'
                 '<span class="label label-danger">失败</span>'
-                '<% } else { %>'
+                "<% } else { %>"
                 '<span class="label label-info">运行中</span>'
-                '<% } %>'
+                "<% } %>"
             ),
         ),
         CollectorLog.started_at,

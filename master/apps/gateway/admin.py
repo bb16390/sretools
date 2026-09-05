@@ -6,17 +6,17 @@
 
 不依赖数据库（使用 JSON 文件存储）。
 """
+
 from __future__ import annotations
 
 from typing import Any
 
-from fastapi_amis_admin import admin, amis
-from fastapi_amis_admin.amis import Page, PageSchema
-from fastapi_amis_admin.amis.components import ActionType
+from master.apps.gateway.core.store import get_default_store
+from master.core.globals import site
+from master.libs.fastapi_amis_admin import admin, amis
+from master.libs.fastapi_amis_admin.amis import Page, PageSchema
+from master.libs.fastapi_amis_admin.amis.components import ActionType
 
-from ..core.store import get_default_store
-
-from core.globals import site
 
 @site.register_admin
 class GatewayAdminApp(admin.AdminApp):
@@ -24,13 +24,15 @@ class GatewayAdminApp(admin.AdminApp):
 
     page_schema = PageSchema(label="网关控制", icon="fa fa-network-wired")
 
-    def __init__(self, app: "AdminApp") -> None:
+    def __init__(self, app: "AdminApp") -> None:  # noqa: F821
         super().__init__(app)
         self.register_admin(GatewayInstanceAdmin)
         self.register_admin(GatewayOpsAdmin)
 
+
 class GatewayInstanceAdmin(admin.PageAdmin):
     """网关实例管理：列表 + 创建/删除/状态查询/启停"""
+
     page_schema = PageSchema(label="实例管理", icon="fa fa-server")
 
     async def get_page(self, request) -> Page:  # type: ignore[override]
@@ -80,9 +82,19 @@ class GatewayInstanceAdmin(admin.PageAdmin):
                             ],
                         ),
                         amis.InputText(name="name", label="名称", required=True),
-                        amis.InputText(name="gateway_dir", label="安装目录", required=True),
-                        amis.InputText(name="binary_name", label="二进制名", required=True),
-                        amis.InputNumber(name="monitor_port", label="监控端口", required=True, min=1, max=65535),
+                        amis.InputText(
+                            name="gateway_dir", label="安装目录", required=True
+                        ),
+                        amis.InputText(
+                            name="binary_name", label="二进制名", required=True
+                        ),
+                        amis.InputNumber(
+                            name="monitor_port",
+                            label="监控端口",
+                            required=True,
+                            min=1,
+                            max=65535,
+                        ),
                         amis.InputText(name="version", label="版本（可选）", value=""),
                     ],
                 ),
@@ -132,7 +144,10 @@ class GatewayOpsAdmin(admin.PageAdmin):
     async def get_page(self, request) -> Page:  # type: ignore[override]
         store = get_default_store()
         instances = store.list()
-        options = [{"label": f"{i.id} ({i.exchange}/{i.kind})", "value": i.id} for i in instances]
+        options = [
+            {"label": f"{i.id} ({i.exchange}/{i.kind})", "value": i.id}
+            for i in instances
+        ]
 
         return amis.Page(
             title="网关运维",
@@ -179,9 +194,24 @@ class GatewayOpsAdmin(admin.PageAdmin):
                     title="部署",
                     api="POST:/api/gateway/instances/${instance_id}/deploy",
                     body=[
-                        amis.Select(name="instance_id", label="目标实例", required=True, options=options or []),
-                        amis.InputFile(name="file", label="部署包 (zip)", required=True, accept=".zip"),
-                        amis.InputText(name="gwid", label="网关 ID (gwid)", required=True, value="GW01"),
+                        amis.Select(
+                            name="instance_id",
+                            label="目标实例",
+                            required=True,
+                            options=options or [],
+                        ),
+                        amis.InputFile(
+                            name="file",
+                            label="部署包 (zip)",
+                            required=True,
+                            accept=".zip",
+                        ),
+                        amis.InputText(
+                            name="gwid",
+                            label="网关 ID (gwid)",
+                            required=True,
+                            value="GW01",
+                        ),
                         amis.InputText(name="password", label="密码"),
                         amis.InputNumber(name="env_id", label="环境(env_id)", value=0),
                         amis.InputNumber(name="level", label="Level", value=2),
@@ -189,10 +219,17 @@ class GatewayOpsAdmin(admin.PageAdmin):
                             name="access_mode",
                             label="接入模式",
                             value="TCP",
-                            options=[{"label": "TCP", "value": "TCP"}, {"label": "UDP", "value": "UDP"}],
+                            options=[
+                                {"label": "TCP", "value": "TCP"},
+                                {"label": "UDP", "value": "UDP"},
+                            ],
                         ),
-                        amis.InputText(name="line_type", label="线路类型", value="地面"),
-                        amis.InputText(name="local_ip", label="本机 IP", value="127.0.0.1"),
+                        amis.InputText(
+                            name="line_type", label="线路类型", value="地面"
+                        ),
+                        amis.InputText(
+                            name="local_ip", label="本机 IP", value="127.0.0.1"
+                        ),
                     ],
                 ),
                 amis.Divider(),
@@ -200,9 +237,21 @@ class GatewayOpsAdmin(admin.PageAdmin):
                     title="升级",
                     api="POST:/api/gateway/instances/${instance_id}/upgrade",
                     body=[
-                        amis.Select(name="instance_id", label="目标实例", required=True, options=options or []),
-                        amis.InputFile(name="file", label="新版本 zip", required=True, accept=".zip"),
-                        amis.InputText(name="version", label="版本号（可选）", value=""),
+                        amis.Select(
+                            name="instance_id",
+                            label="目标实例",
+                            required=True,
+                            options=options or [],
+                        ),
+                        amis.InputFile(
+                            name="file",
+                            label="新版本 zip",
+                            required=True,
+                            accept=".zip",
+                        ),
+                        amis.InputText(
+                            name="version", label="版本号（可选）", value=""
+                        ),
                         amis.InputNumber(name="timeout", label="超时(秒)", value=300),
                     ],
                 ),
@@ -211,8 +260,17 @@ class GatewayOpsAdmin(admin.PageAdmin):
                     title="回滚",
                     api="POST:/api/gateway/instances/${instance_id}/rollback",
                     body=[
-                        amis.Select(name="instance_id", label="目标实例", required=True, options=options or []),
-                        amis.InputText(name="manifest_path", label="manifest.json 路径", required=True),
+                        amis.Select(
+                            name="instance_id",
+                            label="目标实例",
+                            required=True,
+                            options=options or [],
+                        ),
+                        amis.InputText(
+                            name="manifest_path",
+                            label="manifest.json 路径",
+                            required=True,
+                        ),
                     ],
                 ),
                 amis.Divider(),
@@ -231,6 +289,3 @@ class GatewayOpsAdmin(admin.PageAdmin):
                 ),
             ],
         )
-
-
-

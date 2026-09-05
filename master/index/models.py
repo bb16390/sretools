@@ -2,9 +2,9 @@ import uuid
 from datetime import datetime
 from typing import Optional
 
-from fastapi_amis_admin import amis, models
-from fastapi_amis_admin.amis import PageSchema
-from fastapi_amis_admin.models import ChoiceType, Field, SQLModel
+from master.libs.fastapi_amis_admin import amis, models
+from master.libs.fastapi_amis_admin.amis import PageSchema
+from master.libs.fastapi_amis_admin.models import ChoiceType, Field, SQLModel
 from sqlalchemy import Column, Text, func
 from sqlmodel import Relationship
 

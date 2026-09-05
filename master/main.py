@@ -6,11 +6,12 @@
 避免 ``master/grpc`` 子包名与第三方 ``grpcio`` 库发生名称冲突。
 """
 
+import logging
 import os
 import sys
-import logging
 import threading
 from contextlib import asynccontextmanager
+
 
 # ---------------------------------------------------------------------------
 # 1. 确定项目根目录，并清理 / 重置 sys.path，避免 ``master/grpc`` 与
@@ -49,8 +50,7 @@ def _normalize(p: str) -> str:
 
 _MASTER_DIR_NORM = _normalize(_MASTER_DIR)
 sys.path[:] = [
-    p for p in sys.path
-    if p and _normalize(p) not in (_MASTER_DIR_NORM, _normalize(""))
+    p for p in sys.path if p and _normalize(p) not in (_MASTER_DIR_NORM, _normalize(""))
 ]
 
 if _normalize(PROJECT_ROOT) not in {_normalize(p) for p in sys.path}:
@@ -73,23 +73,22 @@ except OSError:
 # ---------------------------------------------------------------------------
 # 2. 导入内部模块（必须放在 sys.path 调整之后）
 # ---------------------------------------------------------------------------
-from fastapi import FastAPI as FastAPIBase  
-from fastapi import applications, File, UploadFile, Form  
-from fastapi.openapi.docs import (  
+from fastapi import FastAPI as FastAPIBase
+from fastapi import File, Form, UploadFile, applications
+from fastapi.openapi.docs import (
     get_swagger_ui_html,
 )
-from fastapi.staticfiles import StaticFiles  
-from sqlmodel import SQLModel  
-from starlette.middleware.cors import CORSMiddleware  
-from starlette.responses import RedirectResponse  
+from fastapi.staticfiles import StaticFiles
+from sqlmodel import SQLModel
+from starlette.middleware.cors import CORSMiddleware
+from starlette.responses import RedirectResponse
 
-from master.index.admin import NavPageAdmin  
-from master.index.file_upload_admin import FileUploadApp  
-from master.core.globals import auth, site  
+from master.core.globals import auth, site
 from master.core.logging import get_uvicorn_log_config
-from master.core.settings import settings  
-from fastapi_amis_admin.crud.schema import BaseApiOut  
-
+from master.core.settings import settings
+from master.index.admin import NavPageAdmin
+from master.index.file_upload_admin import FileUploadApp
+from master.libs.fastapi_amis_admin.crud.schema import BaseApiOut
 
 # 日志logger
 logger = logging.getLogger(__name__)
@@ -134,27 +133,28 @@ async def lifespan(app: FastAPI):
             "u:admin", site.unique_id, "page", "page", "allow"
         )
         logger.info("管理员权限策略添加完成")
-    
+
     # 添加 gRPC 相关导入（使用绝对包导入，避免遮蔽第三方 grpcio）
     try:
         from master.grpc.server import start_grpc_server
+
         grpc_thread = threading.Thread(
-            target=lambda: start_grpc_server(port=50051, daemon=True),
-            daemon=True
+            target=lambda: start_grpc_server(port=50051, daemon=True), daemon=True
         )
         grpc_thread.start()
         logger.info("gRPC 服务已启动，端口: 50051")
     except ImportError:
         logger.info("gRPC 服务模块不可用，跳过启动")
     except Exception as e:
-            logger.error(f"启动 gRPC 服务失败: {e}")
+        logger.error(f"启动 gRPC 服务失败: {e}")
 
     # ----- 采集模块 (apscheduler) 初始化 -----
     try:
         from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
-        from master.apps.collector.core.scheduler import CollectorScheduler
+
         from master.apps.collector.admin import set_collector_scheduler
         from master.apps.collector.api import setup_collector_module
+        from master.apps.collector.core.scheduler import CollectorScheduler
 
         # 构造 session_factory（复用 site.db 内部的 async engine）
         sess_factory = async_sessionmaker(
@@ -207,6 +207,7 @@ site.register_admin(FileUploadApp)
 # 注册采集模块管理页
 try:
     from master.apps.collector.admin import CollectorAdminApp
+
     site.register_admin(CollectorAdminApp)
     logger.info("采集模块管理页已注册")
 except Exception as e:  # noqa: BLE001
@@ -218,6 +219,7 @@ site.mount_app(app)
 # 挂载采集模块 HTTP API
 try:
     from master.apps.collector.api import router as collector_router
+
     app.include_router(collector_router)
     logger.info("采集模块 API 已挂载至 /api/collector")
 except Exception as e:  # noqa: BLE001
@@ -231,30 +233,32 @@ except Exception as e:  # noqa: BLE001
 # 客户端端点: http://<host>:<port>/mcp/mcp
 try:
     from master.apps.mcp_server import mcp_http_app
+
     app.mount("/mcp", mcp_http_app())
     logger.info("MCP Server 已挂载至 /mcp/mcp")
 except ImportError:
-    logger.info("MCP Server 模块不可用，跳过挂载") 
+    logger.info("MCP Server 模块不可用，跳过挂载")
 
 
 # 文件上传API
 @app.post("/api/file-upload/submit")
 async def file_upload_submit(
-    title: str = Form(...),
-    description: str = Form(""),
-    file: UploadFile = File(None)
+    title: str = Form(...), description: str = Form(""), file: UploadFile = File(None)
 ):
     result = {"title": title, "description": description}
-    
+
     if file:
         file_content = await file.read()
-        result.update({
-            "filename": file.filename,
-            "content_type": file.content_type,
-            "file_size": len(file_content),
-        })
-    
+        result.update(
+            {
+                "filename": file.filename,
+                "content_type": file.content_type,
+                "file_size": len(file_content),
+            }
+        )
+
     return BaseApiOut(data=result, msg="提交成功")
+
 
 # 注册首页路由
 @app.get("/")

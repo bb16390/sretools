@@ -1,7 +1,7 @@
 from functools import cached_property
 from typing import Optional
 
-from fastapi_amis_admin.admin.admin import AdminGroup, PageSchemaAdmin
+from master.libs.fastapi_amis_admin.admin.admin import AdminGroup, PageSchemaAdmin
 from sqlalchemy.future import select
 from sqlalchemy.orm import Session
 

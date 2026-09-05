@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Literal
 from urllib.parse import quote_plus
 
-from fastapi_amis_admin import admin
+from master.libs.fastapi_amis_admin import admin
 
 # 获取master目录的绝对路径
 MASTER_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
