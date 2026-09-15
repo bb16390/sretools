@@ -22,22 +22,22 @@ from apps.collector.core.models import (
     StorageType,
     TaskStatus,
 )
-from fastapi_amis_admin import admin, amis
-from fastapi_amis_admin.admin import AdminApp
-from fastapi_amis_admin.amis import (
+from libs.fastapi_amis_admin import admin, amis
+from libs.fastapi_amis_admin.admin import AdminApp
+from libs.fastapi_amis_admin.amis import (
     ActionType,
     LevelEnum,
     Page,
     PageSchema,
     Tabs,
 )
-from fastapi_amis_admin.amis.components import (
+from libs.fastapi_amis_admin.amis.components import (
     ColumnOperation,
     Form,
     Grid,
     TableCRUD,
 )
-from fastapi_amis_admin.crud import BaseApiOut
+from libs.fastapi_amis_admin.crud import BaseApiOut
 
 # 全局调度器引用，在 api.py / main.py 启动时设置
 _scheduler_ref: list[Any] = [None]

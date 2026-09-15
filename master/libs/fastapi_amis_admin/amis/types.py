@@ -1,6 +1,6 @@
 from typing import Any, Dict, List, Optional, Union
 
-from fastapi_amis_admin.utils.pydantic import AllowExtraModelMixin
+from libs.fastapi_amis_admin.utils.pydantic import AllowExtraModelMixin
 
 Expression = str
 

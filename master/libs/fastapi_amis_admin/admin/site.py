@@ -12,14 +12,14 @@ from pydantic import BaseModel
 from starlette.requests import Request
 from starlette.staticfiles import StaticFiles
 
-import fastapi_amis_admin
-from fastapi_amis_admin import amis
-from fastapi_amis_admin.admin import AdminApp, admin
-from fastapi_amis_admin.admin.settings import Settings
-from fastapi_amis_admin.amis.components import Page, PageSchema, Property
-from fastapi_amis_admin.crud.schema import BaseApiOut
-from fastapi_amis_admin.crud.utils import SqlalchemyDatabase
-from fastapi_amis_admin.utils.translation import i18n as _
+import libs.fastapi_amis_admin as fastapi_amis_admin
+from libs.fastapi_amis_admin import amis
+from libs.fastapi_amis_admin.admin import AdminApp, admin
+from libs.fastapi_amis_admin.admin.settings import Settings
+from libs.fastapi_amis_admin.amis.components import Page, PageSchema, Property
+from libs.fastapi_amis_admin.crud.schema import BaseApiOut
+from libs.fastapi_amis_admin.crud.utils import SqlalchemyDatabase
+from libs.fastapi_amis_admin.utils.translation import i18n as _
 
 
 class APIDocsApp(admin.AdminApp):

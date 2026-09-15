@@ -1,10 +1,10 @@
 from typing import Optional
 
 from fastapi import File, UploadFile, Form as FastAPIForm
-from fastapi_amis_admin import admin, amis
-from fastapi_amis_admin.admin import AdminApp
-from fastapi_amis_admin.amis import PageSchema, Form, InputFile, InputText, Textarea
-from fastapi_amis_admin.crud.schema import BaseApiOut
+from libs.fastapi_amis_admin import admin, amis
+from libs.fastapi_amis_admin.admin import AdminApp
+from libs.fastapi_amis_admin.amis import PageSchema, Form, InputFile, InputText, Textarea
+from libs.fastapi_amis_admin.crud.schema import BaseApiOut
 from starlette.requests import Request
 
 

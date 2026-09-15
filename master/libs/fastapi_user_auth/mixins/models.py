@@ -5,9 +5,9 @@ from pydantic import EmailStr, SecretStr
 from sqlalchemy import func
 from sqlmodel import AutoString
 
-from fastapi_user_auth.utils.sqltypes import SecretStrType
-from fastapi_amis_admin.models import Field, SQLModel
-from fastapi_amis_admin.utils.translation import i18n as _
+from libs.fastapi_user_auth.utils.sqltypes import SecretStrType
+from libs.fastapi_amis_admin.models import Field, SQLModel
+from libs.fastapi_amis_admin.utils.translation import i18n as _
 
 
 class PkMixin(SQLModel):

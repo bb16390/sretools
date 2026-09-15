@@ -2,21 +2,21 @@ from typing import Type
 
 from starlette.requests import Request
 
-from fastapi_user_auth.admin import CasbinRuleAdmin
-from fastapi_user_auth.admin import LoginHistoryAdmin as DefaultLoginHistoryAdmin
-from fastapi_user_auth.admin import RoleAdmin as DefaultRoleAdmin
-from fastapi_user_auth.admin import UserAdmin as DefaultUserAdmin
-from fastapi_user_auth.admin import UserInfoFormAdmin as DefaultUserInfoFormAdmin
-from fastapi_user_auth.admin import UserLoginFormAdmin as DefaultUserLoginFormAdmin
-from fastapi_user_auth.admin import UserRegFormAdmin as DefaultUserRegFormAdmin
-from fastapi_user_auth.admin.utils import get_admin_action_options_by_subject
-from fastapi_user_auth.auth import AuthRouter
-from fastapi_user_auth.auth.schemas import SystemUserEnum
-from fastapi_amis_admin.admin import AdminApp, ModelAdmin
-from fastapi_amis_admin.amis.components import PageSchema
-from fastapi_amis_admin.crud import BaseApiOut
-from fastapi_amis_admin.utils.pydantic import create_model_by_model
-from fastapi_amis_admin.utils.translation import i18n as _
+from libs.fastapi_user_auth.admin import CasbinRuleAdmin
+from libs.fastapi_user_auth.admin import LoginHistoryAdmin as DefaultLoginHistoryAdmin
+from libs.fastapi_user_auth.admin import RoleAdmin as DefaultRoleAdmin
+from libs.fastapi_user_auth.admin import UserAdmin as DefaultUserAdmin
+from libs.fastapi_user_auth.admin import UserInfoFormAdmin as DefaultUserInfoFormAdmin
+from libs.fastapi_user_auth.admin import UserLoginFormAdmin as DefaultUserLoginFormAdmin
+from libs.fastapi_user_auth.admin import UserRegFormAdmin as DefaultUserRegFormAdmin
+from libs.fastapi_user_auth.admin.utils import get_admin_action_options_by_subject
+from libs.fastapi_user_auth.auth import AuthRouter
+from libs.fastapi_user_auth.auth.schemas import SystemUserEnum
+from libs.fastapi_amis_admin.admin import AdminApp, ModelAdmin
+from libs.fastapi_amis_admin.amis.components import PageSchema
+from libs.fastapi_amis_admin.crud import BaseApiOut
+from libs.fastapi_amis_admin.utils.pydantic import create_model_by_model
+from libs.fastapi_amis_admin.utils.translation import i18n as _
 
 
 class UserAuthApp(AdminApp, AuthRouter):

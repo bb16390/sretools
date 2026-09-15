@@ -6,13 +6,13 @@ from pydantic import BaseModel
 from starlette.requests import Request
 from starlette.responses import RedirectResponse
 
-from fastapi_user_auth.admin.utils import get_admin_action_options_by_subject
-from fastapi_user_auth.auth import Auth
-from fastapi_user_auth.auth.models import Role, User
-from fastapi_user_auth.auth.schemas import SystemUserEnum
-from fastapi_user_auth.mixins.admin import AuthFieldModelAdmin, AuthSelectModelAdmin
-from fastapi_user_auth.mixins.models import PkMixin, UsernameMixin
-from fastapi_user_auth.utils.casbin import (
+from libs.fastapi_user_auth.admin.utils import get_admin_action_options_by_subject
+from libs.fastapi_user_auth.auth import Auth
+from libs.fastapi_user_auth.auth.models import Role, User
+from libs.fastapi_user_auth.auth.schemas import SystemUserEnum
+from libs.fastapi_user_auth.mixins.admin import AuthFieldModelAdmin, AuthSelectModelAdmin
+from libs.fastapi_user_auth.mixins.models import PkMixin, UsernameMixin
+from libs.fastapi_user_auth.utils.casbin import (
     get_subject_effect_matrix,
     get_subject_page_permissions,
     get_subject_policy_matrix,
@@ -21,15 +21,15 @@ from fastapi_user_auth.utils.casbin import (
     update_subject_page_permissions,
     update_subject_roles,
 )
-from fastapi_amis_admin import amis
-from fastapi_amis_admin.admin import FormAdmin, ModelAction, PageSchemaAdmin
-from fastapi_amis_admin.amis import SchemaNode
-from fastapi_amis_admin.amis.components import ActionType, FormItem
-from fastapi_amis_admin.amis.constants import LevelEnum
-from fastapi_amis_admin.crud.schema import BaseApiOut
-from fastapi_amis_admin.models import Field
-from fastapi_amis_admin.utils.pydantic import ModelField
-from fastapi_amis_admin.utils.translation import i18n as _
+from libs.fastapi_amis_admin import amis
+from libs.fastapi_amis_admin.admin import FormAdmin, ModelAction, PageSchemaAdmin
+from libs.fastapi_amis_admin.amis import SchemaNode
+from libs.fastapi_amis_admin.amis.components import ActionType, FormItem
+from libs.fastapi_amis_admin.amis.constants import LevelEnum
+from libs.fastapi_amis_admin.crud.schema import BaseApiOut
+from libs.fastapi_amis_admin.models import Field
+from libs.fastapi_amis_admin.utils.pydantic import ModelField
+from libs.fastapi_amis_admin.utils.translation import i18n as _
 
 
 @lru_cache()
@@ -147,7 +147,7 @@ class UpdateSubRolesAction(BaseSubAction):
         self, request: Request, modelfield: ModelField
     ) -> Union[FormItem, SchemaNode]:
         item = await super().get_form_item(request, modelfield)
-        from fastapi_user_auth.admin import RoleAdmin  # 防止循环导入
+        from libs.fastapi_user_auth.admin import RoleAdmin  # 防止循环导入
 
         # role_admin = self.admin.app.get_admin_or_create(RoleAdmin)
         role_admin, _ = self.admin.app.get_page_schema_child(

@@ -31,12 +31,12 @@ from starlette.requests import Request
 from starlette.responses import RedirectResponse, Response
 from starlette.websockets import WebSocket
 
-from fastapi_amis_admin.admin import BaseAdminSite
-from fastapi_amis_admin.crud.base import RouterMixin
-from fastapi_amis_admin.crud.schema import BaseApiOut
-from fastapi_amis_admin.utils.functools import cached_property
-from fastapi_amis_admin.utils.pydantic import create_model_by_model
-from fastapi_amis_admin.utils.translation import i18n as _
+from libs.fastapi_amis_admin.admin import BaseAdminSite
+from libs.fastapi_amis_admin.crud.base import RouterMixin
+from libs.fastapi_amis_admin.crud.schema import BaseApiOut
+from libs.fastapi_amis_admin.utils.functools import cached_property
+from libs.fastapi_amis_admin.utils.pydantic import create_model_by_model
+from libs.fastapi_amis_admin.utils.translation import i18n as _
 
 from ..utils.sqlachemy_adapter import Adapter
 from .backends.base import BaseTokenStore

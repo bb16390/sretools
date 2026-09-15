@@ -3,9 +3,9 @@ from typing import Annotated, Any, Literal, Optional, Union
 from apps.collector.models import CollectorTask, DataSource, Opsteam, Subsystem
 from core.globals import site
 from fastapi import Body
-from fastapi_amis_admin import admin
-from fastapi_amis_admin.admin import AdminAction, AdminApp
-from fastapi_amis_admin.amis import (
+from libs.fastapi_amis_admin import admin
+from libs.fastapi_amis_admin.admin import AdminAction, AdminApp
+from libs.fastapi_amis_admin.amis import (
     Action,
     ActionType,
     AmisAPI,
@@ -17,10 +17,10 @@ from fastapi_amis_admin.amis import (
     Service,
     TableCRUD,
 )
-from fastapi_amis_admin.amis.components import PageSchema
-from fastapi_amis_admin.crud import BaseApiOut
-from fastapi_amis_admin.crud.utils import ItemIdListDepend
-from fastapi_amis_admin.utils.pydantic import ModelField
+from libs.fastapi_amis_admin.amis.components import PageSchema
+from libs.fastapi_amis_admin.crud import BaseApiOut
+from libs.fastapi_amis_admin.crud.utils import ItemIdListDepend
+from libs.fastapi_amis_admin.utils.pydantic import ModelField
 from sqlalchemy import event, select
 from sqlmodel.sql.expression import Select
 from starlette.requests import Request

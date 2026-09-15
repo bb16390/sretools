@@ -1,6 +1,6 @@
 from typing import Generic, Optional, TypeVar, Union
 
-from fastapi_user_auth.auth.schemas import BaseTokenData
+from libs.fastapi_user_auth.auth.schemas import BaseTokenData
 
 _TokenDataSchemaT = TypeVar("_TokenDataSchemaT", bound=BaseTokenData)
 

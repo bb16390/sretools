@@ -4,15 +4,15 @@ from typing import Any, Callable, Dict, List, Tuple
 
 from casbin import AsyncEnforcer
 
-from fastapi_user_auth.auth.schemas import SystemUserEnum
-from fastapi_user_auth.utils.casbin import permission_encode, permission_enforce
-from fastapi_amis_admin.admin import FormAdmin, ModelAdmin, PageSchemaAdmin
-from fastapi_amis_admin.admin.admin import (
+from libs.fastapi_user_auth.auth.schemas import SystemUserEnum
+from libs.fastapi_user_auth.utils.casbin import permission_encode, permission_enforce
+from libs.fastapi_amis_admin.admin import FormAdmin, ModelAdmin, PageSchemaAdmin
+from libs.fastapi_amis_admin.admin.admin import (
     AdminGroup,
     BaseActionAdmin,
     BaseAdminSite,
 )
-from fastapi_amis_admin.utils.translation import i18n as _
+from libs.fastapi_amis_admin.utils.translation import i18n as _
 
 
 @lru_cache()

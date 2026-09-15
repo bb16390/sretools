@@ -10,18 +10,18 @@ from starlette.requests import Request
 from starlette.responses import Response
 from starlette.routing import NoMatchFound
 
-from fastapi_user_auth.admin.actions import (
+from libs.fastapi_user_auth.admin.actions import (
     CopyUserAuthLinkAction,
     UpdateSubDataPermAction,
     UpdateSubPagePermsAction,
     UpdateSubRolesAction,
 )
-from fastapi_user_auth.admin.utils import (
+from libs.fastapi_user_auth.admin.utils import (
     get_admin_action_options,
     update_casbin_site_grouping,
 )
-from fastapi_user_auth.auth import Auth
-from fastapi_user_auth.auth.models import (
+from libs.fastapi_user_auth.auth import Auth
+from libs.fastapi_user_auth.auth.models import (
     BaseUser,
     CasbinRule,
     CasbinSubjectRolesQuery,
@@ -30,9 +30,9 @@ from fastapi_user_auth.auth.models import (
     User,
     UserRoleNameLabel,
 )
-from fastapi_user_auth.auth.schemas import SystemUserEnum, UserLoginOut
-from fastapi_user_auth.mixins.admin import AuthFieldModelAdmin, AuthSelectModelAdmin
-from fastapi_amis_admin.admin import (
+from libs.fastapi_user_auth.auth.schemas import SystemUserEnum, UserLoginOut
+from libs.fastapi_user_auth.mixins.admin import AuthFieldModelAdmin, AuthSelectModelAdmin
+from libs.fastapi_amis_admin.admin import (
     AdminAction,
     AdminApp,
     AutoTimeModelAdmin,
@@ -43,7 +43,7 @@ from fastapi_amis_admin.admin import (
     ReadOnlyModelAdmin,
     SoftDeleteModelAdmin,
 )
-from fastapi_amis_admin.amis.components import (
+from libs.fastapi_amis_admin.amis.components import (
     Action,
     ActionType,
     ButtonToolbar,
@@ -54,11 +54,11 @@ from fastapi_amis_admin.amis.components import (
     Page,
     PageSchema,
 )
-from fastapi_amis_admin.amis.constants import DisplayModeEnum, LevelEnum
-from fastapi_amis_admin.crud.base import SchemaUpdateT
-from fastapi_amis_admin.crud.schema import BaseApiOut
-from fastapi_amis_admin.utils.pydantic import model_fields
-from fastapi_amis_admin.utils.translation import i18n as _
+from libs.fastapi_amis_admin.amis.constants import DisplayModeEnum, LevelEnum
+from libs.fastapi_amis_admin.crud.base import SchemaUpdateT
+from libs.fastapi_amis_admin.crud.schema import BaseApiOut
+from libs.fastapi_amis_admin.utils.pydantic import model_fields
+from libs.fastapi_amis_admin.utils.translation import i18n as _
 
 
 def attach_page_head(page: Page) -> Page:

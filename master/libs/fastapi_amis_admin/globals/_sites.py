@@ -1,5 +1,5 @@
-from fastapi_amis_admin.admin import AdminSite
-from fastapi_amis_admin.globals.core import (
+from libs.fastapi_amis_admin.admin import AdminSite
+from libs.fastapi_amis_admin.globals.core import (
     DEFAULT_ALIAS,
     exists_global,
     get_global,

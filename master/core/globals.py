@@ -2,8 +2,8 @@ from sqlalchemy_database import AsyncDatabase
 from core.settings import settings
 
 # 导入Auth相关模块
-from fastapi_user_auth.auth import Auth
-from fastapi_user_auth.auth.backends.db import DbTokenStore
+from libs.fastapi_user_auth.auth import Auth
+from libs.fastapi_user_auth.auth.backends.db import DbTokenStore
 
 # 创建异步数据库引擎
 async_db = AsyncDatabase.create(

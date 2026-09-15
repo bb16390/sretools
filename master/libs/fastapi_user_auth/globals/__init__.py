@@ -1,9 +1,9 @@
 from typing import Type
 
-from fastapi_user_auth.admin import AuthAdminSite
-from fastapi_user_auth.auth import Auth
-from fastapi_user_auth.auth.models import User
-from fastapi_amis_admin import globals as g
+from libs.fastapi_user_auth.admin import AuthAdminSite
+from libs.fastapi_user_auth.auth import Auth
+from libs.fastapi_user_auth.auth.models import User
+from libs.fastapi_amis_admin import globals as g
 
 site: AuthAdminSite
 

@@ -42,7 +42,6 @@ def _detect_project_root() -> str:
 
 PROJECT_ROOT = _detect_project_root()
 _MASTER_DIR = os.path.join(PROJECT_ROOT, "master")
-_LIBS_DIR = os.path.join(_MASTER_DIR, "libs")
 
 
 def _normalize(p: str) -> str:
@@ -54,14 +53,18 @@ def _normalize(p: str) -> str:
 
 # ---------------------------------------------------------------------------
 # 2. 清理 / 重置 sys.path, 然后按优先级加入:
-#    - master/libs : 内置 vendor 库 (fastapi_amis_admin / fastapi_user_auth)
-#    - master/     : 项目内部模块 (core / apps / index / grpc_server 等)
+#    - master/     : 项目内部模块 (core / apps / index / grpc_server / libs 等)
+#                    其中 ``master/libs`` 作为命名空间包,通过 ``libs.*`` 前缀
+#                    引用内置 vendor 库 (fastapi_amis_admin / fastapi_user_auth),
+#                    不再将 ``master/libs`` 单独加入 sys.path,以避免同一文件被
+#                    同时加载为 ``libs.fastapi_amis_admin`` 与 ``fastapi_amis_admin``
+#                    两个不同模块,从而引发 SQLModel 表重复定义等问题。
 #    - PROJECT_ROOT: 供 uvicorn 以 ``master.main:app`` 方式加载
 # ---------------------------------------------------------------------------
 # 先移除空串 (当前工作目录), 避免路径歧义
 sys.path[:] = [p for p in sys.path if p and _normalize(p) != _normalize("")]
 
-for _p in (_LIBS_DIR, _MASTER_DIR, PROJECT_ROOT):
+for _p in (_MASTER_DIR, PROJECT_ROOT):
     if os.path.isdir(_p) and _normalize(_p) not in {_normalize(x) for x in sys.path}:
         sys.path.insert(0, _p)
 
@@ -85,7 +88,7 @@ from fastapi.openapi.docs import (
 from fastapi.staticfiles import StaticFiles
 from index.admin import NavPageAdmin
 from index.file_upload_admin import FileUploadApp
-from fastapi_amis_admin.crud.schema import BaseApiOut
+from libs.fastapi_amis_admin.crud.schema import BaseApiOut
 from sqlmodel import SQLModel
 from starlette.middleware.cors import CORSMiddleware
 from starlette.responses import RedirectResponse
