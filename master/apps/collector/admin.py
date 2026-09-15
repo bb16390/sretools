@@ -1,10 +1,10 @@
-from typing import Any, Optional, Union
+from typing import Annotated, Any, Literal, Optional, Union
 
 from apps.collector.models import CollectorTask, DataSource, Opsteam, Subsystem
 from core.globals import site
+from fastapi import Body
 from fastapi_amis_admin import admin
 from fastapi_amis_admin.admin import AdminAction, AdminApp
-from fastapi_amis_admin.amis.components import PageSchema
 from fastapi_amis_admin.amis import (
     Action,
     ActionType,
@@ -15,9 +15,12 @@ from fastapi_amis_admin.amis import (
     Remark,
     SchemaNode,
     Service,
+    TableCRUD,
 )
-from fastapi_amis_admin.crud import BaseApiOut
+from fastapi_amis_admin.amis.components import PageSchema
+from fastapi_amis_admin.crud import BaseApiOut, ItemIdistDepend
 from fastapi_amis_admin.utils.pydantic import ModelField
+from sqlalchemy import event, select
 from sqlmodel.sql.expression import Select
 from starlette.requests import Request
 
@@ -369,3 +372,145 @@ class CollectorTaskAdmin(admin.ModelAdmin):
                     },
                 )
         return form
+
+    async def get_read_form(self, request: Request) -> Form:
+        form = await super().get_read_form(request)
+        form.initApi = AmisAPI(
+            method="get",
+            url=f"{self.router_path}/item/${self.pk_name}",
+            responseData={
+                "name": "${name}",
+                "collector_type": "${collector_type}",
+                "timeout": "${timeout}",
+                "transform_script": "${transform_script}",
+                "status": "${status}",
+                "conf": "${DECODERJSON(conf)}",
+                "job_id": "${job_id}",
+                "worker_id": "${worker_id}",
+                "subsystem_id": "${subsystem_id}",
+                "update_time": "${update_time}",
+                "create_time": "${create_time}",
+            },
+        )
+        return form
+
+    async def get_list_table(self, request: Request) -> TableCRUD:
+        table = await super().get_list_table(request)
+
+        table.selectable = True
+
+        table.id = "crud"
+
+        table.columns = [
+            column.model_copy(update={"quickEdit": None})
+            if (column.name in ["status", "conf", "worker_id"])
+            else column
+            for column in table.columns
+        ]
+
+        table.quickSaveItemApi = AmisAPI(
+            method="put",
+            url=f"{self.router_path}/item/${self.pk_name}",
+            data={
+                "name": "${name}",
+                "collector_type": "${collector_type}",
+                "timeout": "${timeout}",
+                "transform_script": "${transform_script}",
+                "status": "${status}",
+                "conf": "${ENCODEJSON(conf)}",
+                "subsystem_id": "${subsystem_id}",
+            },
+        )
+        return table
+
+    async def get_form_item_on_foreign_key(
+        self, request: Request, modelfield: ModelField, is_filter: bool = False
+    ) -> Union[Service, SchemaNode, None]:
+        column = self.parser.get_column(modelfield.alias)
+        if column is None:
+            return None
+        foreign_keys = list(column.foreign_keys) or None
+        if foreign_keys is None:
+            return None
+        admin = self.app.site.get_model_admin(foreign_keys[0].column.table.name)
+        if not admin:
+            return None
+        url = admin.router_path + admin.page_path
+        label = modelfield.field_info.title or modelfield.name
+        remark = (
+            Remark(content=modelfield.field_info.description)
+            if modelfield.field_info.description
+            else None
+        )
+        picker = Picker(
+            name=modelfield.alias,
+            label=label,
+            labelField="subsystem",
+            valueField="id",
+            required=(modelfield.field_info.is_required() and not is_filter),
+            modalMode="dialog",
+            inline=is_filter,
+            size="full",
+            labelRemark=remark,
+            pickerSchema="${body}",
+            source="${body.api}",
+        )
+        return Service(
+            name=modelfield.alias,
+            schemaApi=AmisAPI(
+                method="post",
+                url=url,
+                data={},
+                cache=300000,
+                responseData={"controls": [picker]},
+            ),
+        )
+
+    def register_router(self):
+        @self.router.post("/control/{item_id}", include_in_schema=True)
+        async def control(
+            item_id: ItemIdistDepend,
+            action: Literal["start", "stop"],
+            data: Annotated[self.schema_update, Body()] = None,
+        ): ...
+
+        @self.router.post("/preview", include_in_schema=True)
+        async def preview(
+            form_type: str = "preview",
+            data: Annotated[self.schema_update, Body()] = None,
+        ):
+            import orjson
+
+            data = self.schema_create(**data)
+            conf = orjson.loads(data.conf)
+
+            src_db_ids = conf["src_database"].split(",")
+
+            stmt = select(DataSource.node, DataSource.description).where(
+                DataSource.id.in_(src_db_ids)
+            )
+            rows = await self.db.async_execute(stmt)
+            rows = rows.all()
+
+            src_databases = [n._asdict() for n in rows]
+
+            preview_data = []
+
+            for item in src_databases:
+                preview_data.append(item)
+            return preview_data
+
+        return super().register_router()
+
+    def _register_db_events(self):
+        """注册数据库事件"""
+
+        @event.listens_for(CollectorTask, "after_insert")
+        async def after_insert(mapper, connection, target):
+            await self.db.commit()
+
+        @event.listens_for(CollectorTask, "after_update")
+        async def after_update(mapper, connection, target): ...
+
+        @event.listens_for(CollectorTask, "after_delete")
+        async def after_delete(mapper, connection, target): ...
