@@ -115,22 +115,22 @@ except OSError:
 # ---------------------------------------------------------------------------
 # 2. 导入内部模块（必须放在 sys.path 调整之后）
 # ---------------------------------------------------------------------------
+from apps import collector
+from core.globals import auth, site
+from core.logging import get_uvicorn_log_config
+from core.settings import settings
 from fastapi import FastAPI as FastAPIBase
 from fastapi import File, Form, UploadFile, applications
 from fastapi.openapi.docs import (
     get_swagger_ui_html,
 )
 from fastapi.staticfiles import StaticFiles
+from index.admin import NavPageAdmin
+from index.file_upload_admin import FileUploadApp
+from libs.fastapi_amis_admin.crud.schema import BaseApiOut
 from sqlmodel import SQLModel
 from starlette.middleware.cors import CORSMiddleware
 from starlette.responses import RedirectResponse
-
-from master.core.globals import auth, site
-from master.core.logging import get_uvicorn_log_config
-from master.core.settings import settings
-from master.index.admin import NavPageAdmin
-from master.index.file_upload_admin import FileUploadApp
-from master.libs.fastapi_amis_admin.crud.schema import BaseApiOut
 
 # 日志logger
 logger = logging.getLogger(__name__)
@@ -190,32 +190,6 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"启动 gRPC 服务失败: {e}")
 
-    # ----- 采集模块 (apscheduler) 初始化 -----
-    try:
-        from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
-
-        from master.apps.collector.admin import set_collector_scheduler
-        from master.apps.collector.api import setup_collector_module
-        from master.apps.collector.core.scheduler import CollectorScheduler
-
-        # 构造 session_factory（复用 site.db 内部的 async engine）
-        sess_factory = async_sessionmaker(
-            site.db.engine,
-            class_=AsyncSession,
-            expire_on_commit=False,
-        )
-        collector_scheduler = CollectorScheduler(sess_factory)
-        scheduled_count = await collector_scheduler.bootstrap()
-        set_collector_scheduler(collector_scheduler)
-        setup_collector_module(sess_factory, collector_scheduler)
-        logger.info(f"采集调度器初始化完成，已加载 {scheduled_count} 个启用的任务")
-
-        # 停机回调
-        app.state._collector_scheduler = collector_scheduler
-    except Exception as e:  # noqa: BLE001
-        logger.exception(f"采集调度器初始化失败: {e}")
-
-    logger.info("应用启动完成")
     yield
     # ----- 优雅停机 -----
     try:
@@ -246,26 +220,12 @@ site.register_admin(NavPageAdmin)
 
 site.register_admin(FileUploadApp)
 
-# 注册采集模块管理页
-try:
-    from master.apps.collector.admin import CollectorAdminApp
-
-    site.register_admin(CollectorAdminApp)
-    logger.info("采集模块管理页已注册")
-except Exception as e:  # noqa: BLE001
-    logger.exception(f"采集模块管理页注册失败: {e}")
+# 初始化采集模块
+collector.setup(app)
 
 # 挂载后台管理系统
 site.mount_app(app)
 
-# 挂载采集模块 HTTP API
-try:
-    from master.apps.collector.api import router as collector_router
-
-    app.include_router(collector_router)
-    logger.info("采集模块 API 已挂载至 /api/collector")
-except Exception as e:  # noqa: BLE001
-    logger.exception(f"采集模块 API 挂载失败: {e}")
 
 # 挂载网关 HTTP API
 # if GATEWAY_AVAILABLE and gateway_router is not None:
