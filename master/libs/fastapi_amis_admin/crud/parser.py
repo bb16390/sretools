@@ -30,7 +30,7 @@ from sqlalchemy.orm import (
 from sqlalchemy.sql import Select
 from sqlalchemy.sql.elements import Label
 
-from fastapi_amis_admin.utils.pydantic import (
+from libs.fastapi_amis_admin.utils.pydantic import (
     ModelField,
     create_cloned_field,
     create_model_by_fields,

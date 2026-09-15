@@ -2,7 +2,7 @@ from typing import Optional
 
 from sqlalchemy import func, select
 
-from fastapi_user_auth.mixins.models import (  # noqa F401
+from libs.fastapi_user_auth.mixins.models import (  # noqa F401
     CreateTimeMixin,
     CUDTimeMixin,
     DeleteTimeMixin,
@@ -12,10 +12,10 @@ from fastapi_user_auth.mixins.models import (  # noqa F401
     UpdateTimeMixin,
     UsernameMixin,
 )
-from fastapi_amis_admin.amis.components import ColumnImage, InputImage
-from fastapi_amis_admin.crud.parser import LabelField
-from fastapi_amis_admin.models import Field
-from fastapi_amis_admin.utils.translation import i18n as _
+from libs.fastapi_amis_admin.amis.components import ColumnImage, InputImage
+from libs.fastapi_amis_admin.crud.parser import LabelField
+from libs.fastapi_amis_admin.models import Field
+from libs.fastapi_amis_admin.utils.translation import i18n as _
 
 
 class BaseUser(PkMixin, CUDTimeMixin, UsernameMixin, PasswordMixin, EmailMixin):

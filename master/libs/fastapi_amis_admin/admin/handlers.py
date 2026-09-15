@@ -16,8 +16,8 @@ from starlette.status import (
 )
 from starlette.types import Receive, Scope, Send
 
-from fastapi_amis_admin.crud import BaseApiOut
-from fastapi_amis_admin.utils.translation import i18n as _
+from libs.fastapi_amis_admin.crud import BaseApiOut
+from libs.fastapi_amis_admin.utils.translation import i18n as _
 
 
 def register_exception_handlers(app: FastAPI, **kwargs):

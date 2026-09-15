@@ -2,7 +2,7 @@ from enum import Enum
 from typing import Any, Dict, Generic, List, Optional, TypeVar, Union
 from warnings import warn
 
-from fastapi_amis_admin.utils.pydantic import (
+from libs.fastapi_amis_admin.utils.pydantic import (
     AllowExtraModelMixin,
     GenericModel,
 )

@@ -13,9 +13,9 @@ from typing import Any
 
 from apps.gateway.core.store import get_default_store
 from core.globals import site
-from fastapi_amis_admin import admin, amis
-from fastapi_amis_admin.amis import Page, PageSchema
-from fastapi_amis_admin.amis.components import ActionType
+from libs.fastapi_amis_admin import admin, amis
+from libs.fastapi_amis_admin.amis import Page, PageSchema
+from libs.fastapi_amis_admin.amis.components import ActionType
 
 
 @site.register_admin

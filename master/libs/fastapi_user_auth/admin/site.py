@@ -3,11 +3,11 @@ from typing import Optional, Type
 from fastapi import FastAPI
 from starlette.requests import Request
 
-from fastapi_user_auth.admin import UserAuthApp as DefaultUserAuthApp
-from fastapi_user_auth.auth import Auth
-from fastapi_user_auth.auth.schemas import SystemUserEnum
-from fastapi_amis_admin.admin import AdminSite, PageSchemaAdmin, Settings
-from fastapi_amis_admin.amis.components import (
+from libs.fastapi_user_auth.admin import UserAuthApp as DefaultUserAuthApp
+from libs.fastapi_user_auth.auth import Auth
+from libs.fastapi_user_auth.auth.schemas import SystemUserEnum
+from libs.fastapi_amis_admin.admin import AdminSite, PageSchemaAdmin, Settings
+from libs.fastapi_amis_admin.amis.components import (
     ActionType,
     App,
     Dialog,
@@ -15,10 +15,10 @@ from fastapi_amis_admin.amis.components import (
     PageSchema,
     Service,
 )
-from fastapi_amis_admin.amis.constants import SizeEnum
-from fastapi_amis_admin.amis.types import AmisAPI
-from fastapi_amis_admin.crud.utils import SqlalchemyDatabase
-from fastapi_amis_admin.utils.translation import i18n as _
+from libs.fastapi_amis_admin.amis.constants import SizeEnum
+from libs.fastapi_amis_admin.amis.types import AmisAPI
+from libs.fastapi_amis_admin.crud.utils import SqlalchemyDatabase
+from libs.fastapi_amis_admin.utils.translation import i18n as _
 
 
 class AuthAdminSite(AdminSite):

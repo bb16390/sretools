@@ -6,26 +6,26 @@ from sqlalchemy.engine import Result
 from sqlalchemy.sql import Select
 from starlette.requests import Request
 
-from fastapi_amis_admin.admin.admin import (
+from libs.fastapi_amis_admin.admin.admin import (
     AdminAction,
     AdminApp,
     FormAdmin,
     ModelAdmin,
 )
-from fastapi_amis_admin.admin.extensions.schemas import (
+from libs.fastapi_amis_admin.admin.extensions.schemas import (
     FieldPermEnum,
     SelectPerm,
 )
-from fastapi_amis_admin.admin.extensions.utils import (
+from libs.fastapi_amis_admin.admin.extensions.utils import (
     get_schema_fields_name_label,
 )
-from fastapi_amis_admin.amis import (
+from libs.fastapi_amis_admin.amis import (
     FormItem,
     SchemaNode,
     TableColumn,
     TableCRUD,
 )
-from fastapi_amis_admin.crud.base import (
+from libs.fastapi_amis_admin.crud.base import (
     ItemListSchema,
     SchemaCreateT,
     SchemaFilterT,
@@ -33,11 +33,11 @@ from fastapi_amis_admin.crud.base import (
     SchemaReadT,
     SchemaUpdateT,
 )
-from fastapi_amis_admin.crud.parser import TableModelT
-from fastapi_amis_admin.crud.schema import CrudEnum
-from fastapi_amis_admin.utils.functools import cached_property
-from fastapi_amis_admin.utils.pydantic import ModelField
-from fastapi_amis_admin.utils.translation import i18n as _
+from libs.fastapi_amis_admin.crud.parser import TableModelT
+from libs.fastapi_amis_admin.crud.schema import CrudEnum
+from libs.fastapi_amis_admin.utils.functools import cached_property
+from libs.fastapi_amis_admin.utils.pydantic import ModelField
+from libs.fastapi_amis_admin.utils.translation import i18n as _
 
 
 class ReadOnlyModelAdmin(ModelAdmin):
