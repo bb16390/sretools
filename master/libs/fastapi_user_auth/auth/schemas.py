@@ -4,7 +4,7 @@ from typing import Optional
 from pydantic import BaseModel, SecretStr, model_validator
 from sqlmodel import Field
 
-from master.libs.fastapi_amis_admin.utils.translation import i18n as _
+from fastapi_amis_admin.utils.translation import i18n as _
 
 from .models import BaseUser, EmailMixin, PasswordMixin, UsernameMixin
 

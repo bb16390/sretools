@@ -1,20 +1,27 @@
 """gateway 模块冒烟检查。"""
 import json
+import os
 import sys
-from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+# 将 master/ 与 master/libs/ 加入 sys.path，使 `from apps.gateway...` 可直接导入
+_HERE = os.path.dirname(os.path.abspath(__file__))
+_PROJECT_ROOT = os.path.dirname(_HERE)
+_MASTER_DIR = os.path.join(_PROJECT_ROOT, "master")
+_LIBS_DIR = os.path.join(_MASTER_DIR, "libs")
+for _p in (_LIBS_DIR, _MASTER_DIR, _PROJECT_ROOT):
+    if os.path.isdir(_p) and _p not in sys.path:
+        sys.path.insert(0, _p)
 
-from master.gateway.controllers import registry, GatewayControllerABC
-from master.gateway.core.config_tools import (
+from apps.gateway.controllers import registry, GatewayControllerABC
+from apps.gateway.core.config_tools import (
     extract_version_from_archive,
     generate_server_list_xml,
     render_config,
     select_mdgw_template,
     select_tgw_template,
 )
-from master.gateway.core.errors import ConfigError, ProcessError
-from master.gateway.core.models import (
+from apps.gateway.core.errors import ConfigError, ProcessError
+from apps.gateway.core.models import (
     DeployParams,
     GatewayInstance,
     GatewayStatus,
@@ -24,7 +31,7 @@ from master.gateway.core.models import (
 )
 
 _ = (GatewayStatus, RollbackParams)
-from master.gateway.core.process import GatewayProcess
+from apps.gateway.core.process import GatewayProcess
 
 print("registry:")
 for item in registry.list_all():

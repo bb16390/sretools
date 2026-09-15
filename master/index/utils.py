@@ -1,11 +1,11 @@
 from functools import cached_property
 from typing import Optional
 
-from master.libs.fastapi_amis_admin.admin.admin import AdminGroup, PageSchemaAdmin
+from fastapi_amis_admin.admin.admin import AdminGroup, PageSchemaAdmin
 from sqlalchemy.future import select
 from sqlalchemy.orm import Session
 
-from master.index.models import NavPage
+from index.models import NavPage
 
 
 class AmisPageManager:

@@ -21,15 +21,15 @@ from fastapi_user_auth.utils.casbin import (
     update_subject_page_permissions,
     update_subject_roles,
 )
-from master.libs.fastapi_amis_admin import amis
-from master.libs.fastapi_amis_admin.admin import FormAdmin, ModelAction, PageSchemaAdmin
-from master.libs.fastapi_amis_admin.amis import SchemaNode
-from master.libs.fastapi_amis_admin.amis.components import ActionType, FormItem
-from master.libs.fastapi_amis_admin.amis.constants import LevelEnum
-from master.libs.fastapi_amis_admin.crud.schema import BaseApiOut
-from master.libs.fastapi_amis_admin.models import Field
-from master.libs.fastapi_amis_admin.utils.pydantic import ModelField
-from master.libs.fastapi_amis_admin.utils.translation import i18n as _
+from fastapi_amis_admin import amis
+from fastapi_amis_admin.admin import FormAdmin, ModelAction, PageSchemaAdmin
+from fastapi_amis_admin.amis import SchemaNode
+from fastapi_amis_admin.amis.components import ActionType, FormItem
+from fastapi_amis_admin.amis.constants import LevelEnum
+from fastapi_amis_admin.crud.schema import BaseApiOut
+from fastapi_amis_admin.models import Field
+from fastapi_amis_admin.utils.pydantic import ModelField
+from fastapi_amis_admin.utils.translation import i18n as _
 
 
 @lru_cache()

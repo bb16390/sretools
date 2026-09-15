@@ -2,9 +2,9 @@ from typing import Any, Dict, Optional
 
 from fastapi import HTTPException
 
-from master.libs.fastapi_amis_admin.crud import BaseApiOut
-from master.libs.fastapi_amis_admin.models import IntegerChoices
-from master.libs.fastapi_amis_admin.utils.translation import i18n as _
+from fastapi_amis_admin.crud import BaseApiOut
+from fastapi_amis_admin.models import IntegerChoices
+from fastapi_amis_admin.utils.translation import i18n as _
 
 
 class ErrorCode(IntegerChoices):

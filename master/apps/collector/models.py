@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from libs.fastapi_amis_admin.amis import (
+from fastapi_amis_admin.amis import (
     Editor,
     FieldSet,
     InputDatetime,
@@ -10,9 +10,9 @@ from libs.fastapi_amis_admin.amis import (
     TableColumn,
     Validation,
 )
-from libs.fastapi_amis_admin.models import Field, IntegerChoices
-from libs.fastapi_user_auth.mixins.models import PkMixin
-from libs.fastapi_user_auth.utils.sqltypes import SecretStrType
+from fastapi_amis_admin.models import Field, IntegerChoices
+from fastapi_user_auth.mixins.models import PkMixin
+from fastapi_user_auth.utils.sqltypes import SecretStrType
 from pydantic import SecretStr
 from sqlalchemy import func
 

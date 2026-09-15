@@ -14,23 +14,18 @@ from pathlib import Path
 
 import pytest
 
-# 把项目根加入 sys.path，便于 `from master.gateway ...`
-BASE_DIR = Path(__file__).resolve().parent.parent
-import sys
-sys.path.insert(0, str(BASE_DIR))
-
-from master.gateway.controllers import (
+from apps.gateway.controllers import (
     GatewayControllerABC,
     registry,
 )
-from master.gateway.core.config_tools import (
+from apps.gateway.core.config_tools import (
     ConfigError,
     generate_server_list_xml,
     render_config,
     select_mdgw_template,
     select_tgw_template,
 )
-from master.gateway.core.models import (
+from apps.gateway.core.models import (
     DeployParams,
     GatewayInstance,
     GatewayStatus,
@@ -38,8 +33,8 @@ from master.gateway.core.models import (
     RollbackParams,
     UpgradeParams,
 )
-from master.gateway.core.process import GatewayProcess, ProcessError
-from master.gateway.core.store import InstanceStore
+from apps.gateway.core.process import GatewayProcess, ProcessError
+from apps.gateway.core.store import InstanceStore
 
 
 # ---------------------------------------------------------------------------
@@ -294,9 +289,9 @@ class TestGatewayAPI:
     @pytest.fixture()
     def app(self, tmp_path: Path):
         from fastapi import FastAPI
-        from master.gateway.api import router as gateway_router
-        import master.gateway.core.store as _store_mod_core
-        import master.gateway.api as _store_mod_api
+        from apps.gateway.api import router as gateway_router
+        import apps.gateway.core.store as _store_mod_core
+        import apps.gateway.api as _store_mod_api
 
         original = _store_mod_core.get_default_store
         store_path = tmp_path / "api_store.json"

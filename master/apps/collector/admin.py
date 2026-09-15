@@ -2,8 +2,8 @@ from typing import Any, Optional, Union
 
 from apps.collector.models import CollectorTask, DataSource, Opsteam, Subsystem
 from core.globals import site
-from libs.fastapi_amis_admin import AdminAction, AdminApp, PageSchema, admin
-from libs.fastapi_amis_admin.amis import (
+from fastapi_amis_admin import AdminAction, AdminApp, PageSchema, admin
+from fastapi_amis_admin.amis import (
     Action,
     ActionType,
     AmisAPI,
@@ -14,8 +14,8 @@ from libs.fastapi_amis_admin.amis import (
     SchemaNode,
     Service,
 )
-from libs.fastapi_amis_admin.crud.utils import BaseApiOut
-from libs.fastapi_amis_admin.models import ModelField
+from fastapi_amis_admin.crud.utils import BaseApiOut
+from fastapi_amis_admin.models import ModelField
 from sqlmodel.sql.expression import Select
 from starlette.requests import Request
 

@@ -26,7 +26,7 @@ from sqlalchemy.sql.elements import BinaryExpression, Label, UnaryExpression
 from starlette.requests import Request
 from typing_extensions import Annotated, Literal
 
-from master.libs.fastapi_amis_admin.utils.pydantic import (
+from fastapi_amis_admin.utils.pydantic import (
     ModelField,
     ValueItems,
     annotation_outer_type,

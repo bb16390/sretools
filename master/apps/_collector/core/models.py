@@ -9,7 +9,7 @@ from typing import Any, Optional
 
 from sqlalchemy import JSON, Column, Text, func
 
-from master.libs.fastapi_amis_admin.models import ChoiceType, Field, SQLModel
+from fastapi_amis_admin.models import ChoiceType, Field, SQLModel
 
 
 class CollectorType(str, Enum):

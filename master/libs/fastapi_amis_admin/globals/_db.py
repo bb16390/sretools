@@ -3,8 +3,8 @@ from typing import Union
 from sqlalchemy_database import AsyncDatabase, Database
 from typing_extensions import overload
 
-from master.libs.fastapi_amis_admin.globals._sites import exists_site, get_site
-from master.libs.fastapi_amis_admin.globals.core import (
+from fastapi_amis_admin.globals._sites import exists_site, get_site
+from fastapi_amis_admin.globals.core import (
     DEFAULT_ALIAS,
     exists_global,
     get_global,

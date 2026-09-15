@@ -11,11 +11,11 @@ from __future__ import annotations
 
 from typing import Any
 
-from master.apps.gateway.core.store import get_default_store
-from master.core.globals import site
-from master.libs.fastapi_amis_admin import admin, amis
-from master.libs.fastapi_amis_admin.amis import Page, PageSchema
-from master.libs.fastapi_amis_admin.amis.components import ActionType
+from apps.gateway.core.store import get_default_store
+from core.globals import site
+from fastapi_amis_admin import admin, amis
+from fastapi_amis_admin.amis import Page, PageSchema
+from fastapi_amis_admin.amis.components import ActionType
 
 
 @site.register_admin

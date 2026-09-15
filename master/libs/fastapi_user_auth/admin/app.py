@@ -12,11 +12,11 @@ from fastapi_user_auth.admin import UserRegFormAdmin as DefaultUserRegFormAdmin
 from fastapi_user_auth.admin.utils import get_admin_action_options_by_subject
 from fastapi_user_auth.auth import AuthRouter
 from fastapi_user_auth.auth.schemas import SystemUserEnum
-from master.libs.fastapi_amis_admin.admin import AdminApp, ModelAdmin
-from master.libs.fastapi_amis_admin.amis.components import PageSchema
-from master.libs.fastapi_amis_admin.crud import BaseApiOut
-from master.libs.fastapi_amis_admin.utils.pydantic import create_model_by_model
-from master.libs.fastapi_amis_admin.utils.translation import i18n as _
+from fastapi_amis_admin.admin import AdminApp, ModelAdmin
+from fastapi_amis_admin.amis.components import PageSchema
+from fastapi_amis_admin.crud import BaseApiOut
+from fastapi_amis_admin.utils.pydantic import create_model_by_model
+from fastapi_amis_admin.utils.translation import i18n as _
 
 
 class UserAuthApp(AdminApp, AuthRouter):

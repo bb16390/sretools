@@ -4,7 +4,7 @@ from fastapi import Depends
 
 from fastapi_user_auth import globals as g
 from fastapi_user_auth.auth.exceptions import AuthError, ErrorCode
-from master.libs.fastapi_amis_admin.utils.translation import i18n as _
+from fastapi_amis_admin.utils.translation import i18n as _
 
 # 获取当前登录的用户
 get_user_or_none = g.auth.get_current_user

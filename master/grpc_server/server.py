@@ -11,8 +11,8 @@ from typing import Any, Dict, List
 import grpc
 
 try:
-    from master.core.security import SECRET_KEY, verify_signature
-    from master.core.settings import settings
+    from core.security import SECRET_KEY, verify_signature
+    from core.settings import settings
 except ImportError:
     # Fallback if not running in the full project context
     SECRET_KEY = "test-secret-key"

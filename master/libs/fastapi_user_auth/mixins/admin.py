@@ -2,7 +2,7 @@ from sqlalchemy.sql import Select
 from starlette.requests import Request
 
 from fastapi_user_auth.auth.schemas import SystemUserEnum
-from master.libs.fastapi_amis_admin.admin import (
+from fastapi_amis_admin.admin import (
     BaseAuthFieldModelAdmin,
     BaseAuthSelectModelAdmin,
 )

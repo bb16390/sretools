@@ -6,8 +6,8 @@ from sqlalchemy import func
 from sqlmodel import AutoString
 
 from fastapi_user_auth.utils.sqltypes import SecretStrType
-from master.libs.fastapi_amis_admin.models import Field, SQLModel
-from master.libs.fastapi_amis_admin.utils.translation import i18n as _
+from fastapi_amis_admin.models import Field, SQLModel
+from fastapi_amis_admin.utils.translation import i18n as _
 
 
 class PkMixin(SQLModel):
