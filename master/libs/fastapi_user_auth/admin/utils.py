@@ -6,13 +6,13 @@ from casbin import AsyncEnforcer
 
 from fastapi_user_auth.auth.schemas import SystemUserEnum
 from fastapi_user_auth.utils.casbin import permission_encode, permission_enforce
-from master.libs.fastapi_amis_admin.admin import FormAdmin, ModelAdmin, PageSchemaAdmin
-from master.libs.fastapi_amis_admin.admin.admin import (
+from fastapi_amis_admin.admin import FormAdmin, ModelAdmin, PageSchemaAdmin
+from fastapi_amis_admin.admin.admin import (
     AdminGroup,
     BaseActionAdmin,
     BaseAdminSite,
 )
-from master.libs.fastapi_amis_admin.utils.translation import i18n as _
+from fastapi_amis_admin.utils.translation import i18n as _
 
 
 @lru_cache()

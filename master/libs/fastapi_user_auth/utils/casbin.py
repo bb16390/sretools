@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from fastapi_user_auth.auth.models import CasbinRule
 from fastapi_user_auth.auth.schemas import SystemUserEnum
-from master.libs.fastapi_amis_admin.utils.translation import i18n as _
+from fastapi_amis_admin.utils.translation import i18n as _
 
 
 # 执行casbin字符串规则

@@ -12,10 +12,10 @@ from fastapi_user_auth.mixins.models import (  # noqa F401
     UpdateTimeMixin,
     UsernameMixin,
 )
-from master.libs.fastapi_amis_admin.amis.components import ColumnImage, InputImage
-from master.libs.fastapi_amis_admin.crud.parser import LabelField
-from master.libs.fastapi_amis_admin.models import Field
-from master.libs.fastapi_amis_admin.utils.translation import i18n as _
+from fastapi_amis_admin.amis.components import ColumnImage, InputImage
+from fastapi_amis_admin.crud.parser import LabelField
+from fastapi_amis_admin.models import Field
+from fastapi_amis_admin.utils.translation import i18n as _
 
 
 class BaseUser(PkMixin, CUDTimeMixin, UsernameMixin, PasswordMixin, EmailMixin):

@@ -23,15 +23,15 @@ from typing import Any
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel, Field
 
-from ..core.errors import GatewayError
-from ..core.models import (
+from .core.errors import GatewayError
+from .core.models import (
     DeployParams,
     GatewayInstance,
     RollbackParams,
     UpgradeParams,
 )
-from ..core.store import InstanceStore, get_default_store
-from ..controllers import registry
+from .core.store import InstanceStore, get_default_store
+from .controllers import registry
 
 log = logging.getLogger(__name__)
 

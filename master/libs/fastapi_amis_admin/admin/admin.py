@@ -31,11 +31,11 @@ from starlette.responses import HTMLResponse, Response
 from starlette.templating import Jinja2Templates
 from typing_extensions import Annotated, Literal
 
-from master.libs import fastapi_amis_admin
-from master.libs.fastapi_amis_admin.admin.handlers import register_exception_handlers
-from master.libs.fastapi_amis_admin.admin.parser import AmisParser
-from master.libs.fastapi_amis_admin.admin.settings import Settings
-from master.libs.fastapi_amis_admin.amis.components import (
+import fastapi_amis_admin
+from fastapi_amis_admin.admin.handlers import register_exception_handlers
+from fastapi_amis_admin.admin.parser import AmisParser
+from fastapi_amis_admin.admin.settings import Settings
+from fastapi_amis_admin.amis.components import (
     Action,
     ActionType,
     App,
@@ -55,45 +55,45 @@ from master.libs.fastapi_amis_admin.amis.components import (
     TableCRUD,
     Tpl,
 )
-from master.libs.fastapi_amis_admin.amis.constants import (
+from fastapi_amis_admin.amis.constants import (
     DisplayModeEnum,
     LevelEnum,
     SizeEnum,
 )
-from master.libs.fastapi_amis_admin.amis.types import (
+from fastapi_amis_admin.amis.types import (
     AmisAPI,
     AmisNode,
     BaseAmisApiOut,
     BaseAmisModel,
     SchemaNode,
 )
-from master.libs.fastapi_amis_admin.crud import RouterMixin, SqlalchemyCrud
-from master.libs.fastapi_amis_admin.crud.base import (
+from fastapi_amis_admin.crud import RouterMixin, SqlalchemyCrud
+from fastapi_amis_admin.crud.base import (
     SchemaCreateT,
     SchemaFilterT,
     SchemaUpdateT,
 )
-from master.libs.fastapi_amis_admin.crud.parser import (
+from fastapi_amis_admin.crud.parser import (
     SqlaField,
     TableModelParser,
     get_python_type_parse,
 )
-from master.libs.fastapi_amis_admin.crud.schema import BaseApiOut, CrudEnum, Paginator
-from master.libs.fastapi_amis_admin.crud.utils import (
+from fastapi_amis_admin.crud.schema import BaseApiOut, CrudEnum, Paginator
+from fastapi_amis_admin.crud.utils import (
     IdStrQuery,
     SqlalchemyDatabase,
     get_engine_db,
     parser_str_set_list,
 )
-from master.libs.fastapi_amis_admin.utils.functools import cached_property
-from master.libs.fastapi_amis_admin.utils.pydantic import (
+from fastapi_amis_admin.utils.functools import cached_property
+from fastapi_amis_admin.utils.pydantic import (
     ModelField,
     annotation_outer_type,
     create_model_by_model,
     deep_update,
     model_fields,
 )
-from master.libs.fastapi_amis_admin.utils.translation import i18n as _
+from fastapi_amis_admin.utils.translation import i18n as _
 
 BaseAdminT = TypeVar("BaseAdminT", bound="BaseAdmin")
 PageSchemaAdminT = TypeVar("PageSchemaAdminT", bound="PageSchemaAdmin")

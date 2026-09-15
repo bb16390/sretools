@@ -1,12 +1,12 @@
 import os
 
-from master.libs.fastapi_amis_admin.amis.components import App, Grid, Html, Page
-from master.libs.fastapi_amis_admin.utils.translation import i18n as _
-from master.libs.fastapi_user_auth.admin import AuthAdminSite
-import master.libs.fastapi_user_auth.admin as _fua_pkg
-import master.libs.fastapi_user_auth.admin.admin as _fua_admin
+from fastapi_amis_admin.amis.components import App, Grid, Html, Page
+from fastapi_amis_admin.utils.translation import i18n as _
+from fastapi_user_auth.admin import AuthAdminSite
+import fastapi_user_auth.admin as _fua_pkg
+import fastapi_user_auth.admin.admin as _fua_admin
 
-from master.core.settings import settings
+from core.settings import settings
 
 # fastapi_amis_admin 默认模板引用的是 npm CDN 风格的带版本号路径
 # (vue@2.7.14/dist/vue.min.js、history@5.3.0/umd/history.production.min.js)，

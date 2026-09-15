@@ -9,9 +9,9 @@ from fastapi._compat import (
 )
 from pydantic import BaseModel, Json
 
-from master.libs.fastapi_amis_admin import amis
-from master.libs.fastapi_amis_admin.amis import AmisNode
-from master.libs.fastapi_amis_admin.amis.components import (
+from fastapi_amis_admin import amis
+from fastapi_amis_admin.amis import AmisNode
+from fastapi_amis_admin.amis.components import (
     Form,
     FormItem,
     InputArray,
@@ -19,9 +19,9 @@ from master.libs.fastapi_amis_admin.amis.components import (
     TableColumn,
     Validation,
 )
-from master.libs.fastapi_amis_admin.amis.constants import LabelEnum
-from master.libs.fastapi_amis_admin.models import Choices
-from master.libs.fastapi_amis_admin.utils.pydantic import (
+from fastapi_amis_admin.amis.constants import LabelEnum
+from fastapi_amis_admin.models import Choices
+from fastapi_amis_admin.utils.pydantic import (
     ModelField,
     annotation_outer_type,
     deep_update,
@@ -33,7 +33,7 @@ from master.libs.fastapi_amis_admin.utils.pydantic import (
     scalar_sequence_inner_type,
     smart_deepcopy,
 )
-from master.libs.fastapi_amis_admin.utils.translation import i18n as _
+from fastapi_amis_admin.utils.translation import i18n as _
 
 _T = TypeVar("_T")
 

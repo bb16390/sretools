@@ -2,8 +2,12 @@
 
 无论是从项目根目录运行（如 ``python -m master.main``),
 还是直接进入 ``master/`` 目录运行（如 ``python main.py``),
-本文件都会把 **项目根目录** 正确加入 ``sys.path``,
-避免 ``master/grpc`` 子包名与第三方 ``grpcio`` 库发生名称冲突。
+本文件都会把 ``master/`` 与 ``master/libs/`` 正确加入 ``sys.path``,
+使项目内部模块可直接以 ``from core...`` / ``from apps...`` 等形式导入,
+无需使用 ``master.`` 前缀。
+
+``master/grpc`` 已重命名为 ``master/grpc_server``, 不再与第三方 ``grpcio``
+发生包名冲突, 因此 ``master/`` 可安全加入 ``sys.path``。
 """
 
 import logging
@@ -14,8 +18,7 @@ from contextlib import asynccontextmanager
 
 
 # ---------------------------------------------------------------------------
-# 1. 确定项目根目录，并清理 / 重置 sys.path，避免 ``master/grpc`` 与
-#    第三方 ``grpcio`` 发生包名冲突
+# 1. 确定项目根目录
 # ---------------------------------------------------------------------------
 def _detect_project_root() -> str:
     """向上探测包含 ``pyproject.toml`` 的目录作为项目根。"""
@@ -39,6 +42,7 @@ def _detect_project_root() -> str:
 
 PROJECT_ROOT = _detect_project_root()
 _MASTER_DIR = os.path.join(PROJECT_ROOT, "master")
+_LIBS_DIR = os.path.join(_MASTER_DIR, "libs")
 
 
 def _normalize(p: str) -> str:
@@ -48,22 +52,18 @@ def _normalize(p: str) -> str:
         return p
 
 
-_MASTER_DIR_NORM = _normalize(_MASTER_DIR)
-sys.path[:] = [
-    p for p in sys.path if p and _normalize(p) not in (_MASTER_DIR_NORM, _normalize(""))
-]
+# ---------------------------------------------------------------------------
+# 2. 清理 / 重置 sys.path, 然后按优先级加入:
+#    - master/libs : 内置 vendor 库 (fastapi_amis_admin / fastapi_user_auth)
+#    - master/     : 项目内部模块 (core / apps / index / grpc_server 等)
+#    - PROJECT_ROOT: 供 uvicorn 以 ``master.main:app`` 方式加载
+# ---------------------------------------------------------------------------
+# 先移除空串 (当前工作目录), 避免路径歧义
+sys.path[:] = [p for p in sys.path if p and _normalize(p) != _normalize("")]
 
-if _normalize(PROJECT_ROOT) not in {_normalize(p) for p in sys.path}:
-    sys.path.insert(0, PROJECT_ROOT)
-
-# 3. 将本地化 vendor 库目录 (master/libs/) 提前到 sys.path 首位,
-#    使 `from master.libs import fastapi_amis_admin` / `from master.libs import fastapi_user_auth` 解析到
-#    项目内置副本,而不是 site-packages 中的 pip 版本。
-_LIBS_DIR = os.path.join(_MASTER_DIR, "libs")
-if os.path.isdir(_LIBS_DIR) and _normalize(_LIBS_DIR) not in {
-    _normalize(p) for p in sys.path
-}:
-    sys.path.insert(0, _LIBS_DIR)
+for _p in (_LIBS_DIR, _MASTER_DIR, PROJECT_ROOT):
+    if os.path.isdir(_p) and _normalize(_p) not in {_normalize(x) for x in sys.path}:
+        sys.path.insert(0, _p)
 
 try:
     os.chdir(PROJECT_ROOT)
@@ -71,49 +71,7 @@ except OSError:
     pass
 
 # ---------------------------------------------------------------------------
-# 1.5 防止 vendored 库 (master/libs) 出现双模块身份:
-#     应用代码以 ``from master.libs.fastapi_amis_admin...`` 导入,
-#     而库内部以绝对 ``from master.libs.fastapi_amis_admin...`` 导入;
-#     若不加处理,同一 .py 会被加载为两份独立模块 (sys.modules 中
-#     ``master.libs.fastapi_amis_admin.amis.components`` 与
-#     ``fastapi_amis_admin.amis.components`` 是两个不同对象),
-#     导致 ``isinstance(<PageSchema 实例 via master.libs...>,
-#     <PageSchema 类 via fastapi_amis_admin...>)`` 返回 False,
-#     ``PageSchemaAdmin.get_page_schema`` 因此抛 TypeError,启动失败。
-#     此处安装 meta_path finder,将 ``master.libs.<lib>.*`` 重定向到
-#     canonical ``<lib>.*``,保证全局唯一模块身份。
-# ---------------------------------------------------------------------------
-# import importlib  # noqa: E402
-# import importlib.abc  # noqa: E402
-# import importlib.machinery  # noqa: E402
-
-# class _VendorLibAliasLoader(importlib.abc.Loader):
-#     """返回 canonical (顶层) 模块对象作为 ``master.libs.<lib>.*`` 别名。"""
-#     def __init__(self, canonical_name: str) -> None:
-#         self._canonical = canonical_name
-#     def create_module(self, spec):
-#         return importlib.import_module(self._canonical)
-#     def exec_module(self, module) -> None:
-#         # canonical 模块已执行过,无需重复执行
-#         pass
-# class _VendorLibAliasFinder(importlib.abc.MetaPathFinder):
-#     """将 ``master.libs.<lib>.*`` 导入重定向到 canonical ``<lib>.*``。"""
-#     _MAP = {
-#         "master.libs.fastapi_amis_admin": "fastapi_amis_admin",
-#         "master.libs.fastapi_user_auth": "fastapi_user_auth",
-#     }
-#     def find_spec(self, fullname, path=None, target=None):
-#         for prefix, canonical_prefix in self._MAP.items():
-#             if fullname == prefix or fullname.startswith(prefix + "."):
-#                 canonical = canonical_prefix + fullname[len(prefix) :]
-#                 return importlib.machinery.ModuleSpec(
-#                     fullname, _VendorLibAliasLoader(canonical)
-#                 )
-#         return None
-# if not any(isinstance(f, _VendorLibAliasFinder) for f in sys.meta_path):
-#     sys.meta_path.insert(0, _VendorLibAliasFinder())
-# ---------------------------------------------------------------------------
-# 2. 导入内部模块（必须放在 sys.path 调整之后）
+# 3. 导入内部模块（必须放在 sys.path 调整之后）
 # ---------------------------------------------------------------------------
 from apps import collector
 from core.globals import auth, site
@@ -127,7 +85,7 @@ from fastapi.openapi.docs import (
 from fastapi.staticfiles import StaticFiles
 from index.admin import NavPageAdmin
 from index.file_upload_admin import FileUploadApp
-from libs.fastapi_amis_admin.crud.schema import BaseApiOut
+from fastapi_amis_admin.crud.schema import BaseApiOut
 from sqlmodel import SQLModel
 from starlette.middleware.cors import CORSMiddleware
 from starlette.responses import RedirectResponse
@@ -178,7 +136,7 @@ async def lifespan(app: FastAPI):
 
     # 添加 gRPC 相关导入（使用绝对包导入，避免遮蔽第三方 grpcio）
     try:
-        from master.grpc.server import start_grpc_server
+        from grpc_server.server import start_grpc_server
 
         grpc_thread = threading.Thread(
             target=lambda: start_grpc_server(port=50051, daemon=True), daemon=True
@@ -234,7 +192,7 @@ site.mount_app(app)
 # 挂载 MCP Server（Streamable HTTP 传输）
 # 客户端端点: http://<host>:<port>/mcp/mcp
 try:
-    from master.apps.mcp_server import mcp_http_app
+    from apps.mcp_server import mcp_http_app
 
     app.mount("/mcp", mcp_http_app())
     logger.info("MCP Server 已挂载至 /mcp/mcp")

@@ -2,7 +2,7 @@
 """Generate gRPC Python code from .proto file.
 
 生成后会自动把 ``*_pb2_grpc.py`` 中的裸 ``import worker_pb2``
-修正为包内相对导入 ``from . import worker_pb2``，避免 ``master/grpc``
+修正为包内相对导入 ``from . import worker_pb2``，避免 ``master/grpc_server``
 或 ``worker/grpc`` 目录被加入 ``sys.path`` 时遮蔽第三方 ``grpcio``
 库导致 ``grpc.__version__`` 报错。
 """
@@ -41,7 +41,7 @@ def main():
     proto_file = os.path.join(root_dir, "protos", "worker.proto")
     
     # Output directories
-    master_grpc_dir = os.path.join(root_dir, "master", "grpc")
+    master_grpc_dir = os.path.join(root_dir, "master", "grpc_server")
     worker_grpc_dir = os.path.join(root_dir, "worker", "grpc")
     
     # Ensure output directories exist

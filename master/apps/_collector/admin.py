@@ -13,7 +13,7 @@ from typing import Any
 from sqlalchemy import desc, func, select
 from starlette.requests import Request
 
-from master.apps.collector.core.models import (
+from apps.collector.core.models import (
     CollectorLog,
     CollectorTask,
     CollectorType,
@@ -22,22 +22,22 @@ from master.apps.collector.core.models import (
     StorageType,
     TaskStatus,
 )
-from master.libs.fastapi_amis_admin import admin, amis
-from master.libs.fastapi_amis_admin.admin import AdminApp
-from master.libs.fastapi_amis_admin.amis import (
+from fastapi_amis_admin import admin, amis
+from fastapi_amis_admin.admin import AdminApp
+from fastapi_amis_admin.amis import (
     ActionType,
     LevelEnum,
     Page,
     PageSchema,
     Tabs,
 )
-from master.libs.fastapi_amis_admin.amis.components import (
+from fastapi_amis_admin.amis.components import (
     ColumnOperation,
     Form,
     Grid,
     TableCRUD,
 )
-from master.libs.fastapi_amis_admin.crud import BaseApiOut
+from fastapi_amis_admin.crud import BaseApiOut
 
 # 全局调度器引用，在 api.py / main.py 启动时设置
 _scheduler_ref: list[Any] = [None]

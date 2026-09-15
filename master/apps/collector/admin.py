@@ -2,8 +2,10 @@ from typing import Any, Optional, Union
 
 from apps.collector.models import CollectorTask, DataSource, Opsteam, Subsystem
 from core.globals import site
-from libs.fastapi_amis_admin import AdminAction, AdminApp, PageSchema, admin
-from libs.fastapi_amis_admin.amis import (
+from fastapi_amis_admin import admin
+from fastapi_amis_admin.admin import AdminAction, AdminApp
+from fastapi_amis_admin.amis.components import PageSchema
+from fastapi_amis_admin.amis import (
     Action,
     ActionType,
     AmisAPI,
@@ -14,8 +16,8 @@ from libs.fastapi_amis_admin.amis import (
     SchemaNode,
     Service,
 )
-from libs.fastapi_amis_admin.crud.utils import BaseApiOut
-from libs.fastapi_amis_admin.models import ModelField
+from fastapi_amis_admin.crud import BaseApiOut
+from fastapi_amis_admin.utils.pydantic import ModelField
 from sqlmodel.sql.expression import Select
 from starlette.requests import Request
 
@@ -43,7 +45,7 @@ class DataSourceAdmin(admin.ModelAdmin):
         DataSource.node,
         DataSource.name,
         DataSource.collector_type,
-        DataSource.type,
+        DataSource.database_type,
         DataSource.url,
         DataSource.username,
         DataSource.status,
@@ -115,7 +117,7 @@ class DataSourceAdmin(admin.ModelAdmin):
                 DataSource.id,
                 DataSource.name,
                 DataSource.collector_type,
-                DataSource.type,
+                DataSource.database_type,
                 DataSource.url,
                 DataSource.username,
             )
@@ -136,7 +138,7 @@ class DataSourceAdmin(admin.ModelAdmin):
         return super().register_router()
 
 
-class CollectorTaskAdmin(admin.AdminModel):
+class CollectorTaskAdmin(admin.ModelAdmin):
     """
     采集任务管理
     """
@@ -149,7 +151,6 @@ class CollectorTaskAdmin(admin.AdminModel):
         CollectorTask.id,
         CollectorTask.name,
         CollectorTask.collector_type,
-        CollectorTask.type,
         CollectorTask.status,
     ]
 
@@ -157,34 +158,33 @@ class CollectorTaskAdmin(admin.AdminModel):
         Subsystem.subsystem,
         CollectorTask.name,
         CollectorTask.collector_type,
-        CollectorTask.type,
         CollectorTask.status,
     ]
 
     # 创建时排除的字段
-    create_exclude = [
-        CollectorTask.job_id,
-        CollectorTask.last_run_time,
-        CollectorTask.last_run_status,
-        CollectorTask.last_run_duration_ms,
-        CollectorTask.total_failed_count,
-        CollectorTask.total_run_count,
-        CollectorTask.create_time,
-        CollectorTask.update_time,
-    ]
+    create_exclude = {
+        "job_id",
+        "last_run_time",
+        "last_run_status",
+        "last_run_duration_ms",
+        "total_failed_count",
+        "total_run_count",
+        "create_time",
+        "update_time",
+    }
 
     # 更新时排除的字段
-    update_exclude = [
-        CollectorTask.id,
-        CollectorTask.job_id,
-        CollectorTask.last_run_time,
-        CollectorTask.last_run_status,
-        CollectorTask.last_run_duration_ms,
-        CollectorTask.total_failed_count,
-        CollectorTask.total_run_count,
-        CollectorTask.create_time,
-        CollectorTask.update_time,
-    ]
+    update_exclude = {
+        "id",
+        "job_id",
+        "last_run_time",
+        "last_run_status",
+        "last_run_duration_ms",
+        "total_failed_count",
+        "total_run_count",
+        "create_time",
+        "update_time",
+    }
 
     # 读取时显示的字段
     read_fields = [
@@ -195,7 +195,7 @@ class CollectorTaskAdmin(admin.AdminModel):
         CollectorTask.transform_script,
         CollectorTask.conf,
         CollectorTask.job_id,
-        CollectorTask.subsytem_id,
+        CollectorTask.subsystem_id,
         CollectorTask.create_time,
         CollectorTask.update_time,
     ]
@@ -257,8 +257,6 @@ class CollectorTaskAdmin(admin.AdminModel):
 
     def __init__(self, app: "AdminApp"):
         super().__init__(app)
-        # 注册数据库事件
-        self._register_db_events()
 
     async def get_select(self, request: Request) -> Select:
         sel = await super().get_select(request)

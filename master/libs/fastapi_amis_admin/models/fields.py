@@ -17,7 +17,7 @@ from sqlalchemy import Column
 from sqlmodel._compat import Undefined, UndefinedType, post_init_field_info
 from sqlmodel.main import FieldInfo, NoArgAnyCallable
 
-from master.libs.fastapi_amis_admin.amis import FormItem, TableColumn
+from fastapi_amis_admin.amis import FormItem, TableColumn
 
 ValidationAliasT = Union[str, AliasPath, AliasChoices, None]
 
