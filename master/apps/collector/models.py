@@ -14,7 +14,7 @@ from fastapi_amis_admin.models import Field, IntegerChoices
 from fastapi_user_auth.mixins.models import PkMixin
 from fastapi_user_auth.utils.sqltypes import SecretStrType
 from pydantic import SecretStr
-from sqlalchemy import func
+from sqlalchemy import JSON, Column, func
 
 
 class DatabaseType(IntegerChoices):
@@ -85,8 +85,16 @@ class Opsteam(PkMixin, table=True):
     __tablename__ = "t_opsteam"
     name: str = Field(nullable=False, title="团队名称")
     manager: str = Field(nullable=False, title="负责人")
-    members_en: list[str] = Field(nullable=False, title="成员英文名称")
-    members_cn: list[str] = Field(nullable=False, title="成员中文名称")
+    members_en: list[str] = Field(
+        default_factory=list,
+        title="成员英文名称",
+        sa_column=Column(JSON, nullable=False),
+    )
+    members_cn: list[str] = Field(
+        default_factory=list,
+        title="成员中文名称",
+        sa_column=Column(JSON, nullable=False),
+    )
 
 
 class Subsystem(PkMixin, table=True):
@@ -251,6 +259,6 @@ class CollectorTask(PkMixin, table=True):
         index=True,
         sa_column_kwargs={"onupdate": func.now(), "server_default": func.now()},
     )
-    subsytem_id: int = Field(
+    subsystem_id: int = Field(
         default=0, nullable=False, title="子系统", foreign_key="t_subsystem.id"
     )
