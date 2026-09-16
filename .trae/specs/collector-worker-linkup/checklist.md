@@ -1,0 +1,19 @@
+- [ ] master `apps/collector/models.py` 中 `DataSource` / `CollectorTask` 字段定义未修改（前后端联动改造前后字段集合与类型一致）
+- [ ] master `apps/collector/admin.py` 中 DataSourceAdmin / CollectorTaskAdmin 的 `page_schema` / `list_display` / `create_exclude` / `update_exclude` / `read_fields` / `admin_action_maker` 等 AMIS 前端配置结构未修改
+- [ ] `master/apps/collector/admin.py` 中 `FieldSet(conf)` 内的表单项（交易日、触发表达式、源数据库、SQL、目标数据库、目标表、数据键值）保持不变
+- [ ] `protos/worker.proto` 中 `TaskStatus` 与 `TaskUpdate` 消息已按 spec 扩展字段（task_type / worker_id / duration_ms / result / extra 等）
+- [ ] `master/grpc_server/worker_pb2*.py` 与 `worker/grpc/worker_pb2*.py` 已通过 `scripts/generate_grpc_code.py` 重新生成且两端可正常 import
+- [ ] `master/grpc_server/server.py` 的 `Communicate` 已按真实 `worker_id` 索引活跃流（不再使用 `stream-worker-<timestamp>` 占位）
+- [ ] `master/grpc_server/server.py` 已实现 `push_task_update(worker_id, task_update_dict) -> bool`，可向指定 worker 推送 `MasterMessage(task_update=...)`
+- [ ] `master/grpc_server/server.py` 收到 `WorkerMessage.task_status` 后能正确定位 `CollectorTask` 并回写 `exec_status` / `last_run_*` / `total_*` 字段
+- [ ] master 新增 `GET /api/collector/workers` 路由，返回已注册 worker 列表（worker_id / host / port / status / last_heartbeat）
+- [ ] master `POST /admin/collector/CollectorTaskAdmin/preview` 真正执行试采，返回 `{success, rows, rows_count, duration_ms, worker_id, preview_token}` 或 `{success:false, error, duration_ms}`
+- [ ] master `POST /admin/collector/CollectorTaskAdmin/item` 创建任务时强制校验 `preview_token`，无效或预览失败时返回 `BaseApiOut(status=-1, msg="preview required or preview failed")`
+- [ ] master `POST /admin/collector/CollectorTaskAdmin/dispatch` 路由可将任务下发到指定 worker：校验 worker 在线、推送 TaskUpdate、回写 `CollectorTask.worker_id` 与 `job_id`
+- [ ] worker 端 `worker/grpc/client.py` 的 `send_websocket_message` 通过出站队列将 `WorkerMessage(task_status=...)` 经 `Communicate` 双向流发送给 master
+- [ ] worker 端出站队列为线程安全的非阻塞队列，队列满时丢弃最旧消息并记日志，不阻塞任务执行线程
+- [ ] worker 端 `worker/scheduler/task_scheduler.py` 的 `report_task_status` 上报字段包含 `task_id` / `status` / `message` / `timestamp` / `task_type` / `worker_id` / `duration_ms` / `result` / `extra`
+- [ ] 端到端验证：创建任务 → 预览成功 → 携带 preview_token 创建 → 下发到 worker → worker 执行 → master `CollectorTask` 的 `last_run_status` / `total_run_count` 字段被回写
+- [ ] 端到端验证：不带 preview_token 创建任务被拒绝（返回 status=-1）
+- [ ] 端到端验证：下发到不存在的 worker 时返回 `BaseApiOut(status=-1, msg="worker not found or offline")`
+- [ ] `master/apps/_collector/`（独立 APScheduler 模块）未被本联动改造影响
