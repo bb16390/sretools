@@ -144,26 +144,45 @@ class TaskScheduler:
         }
 
     def _on_task_status(self, task_id: str, task_type: str, status: str,
-                        result: Any = None, duration_ms: float = 0):
+                        result: Any = None, duration_ms: float = 0,
+                        extra: Optional[Dict[str, Any]] = None):
         """任务状态回调，触发上报"""
-        self.report_task_status(task_id, status, result, duration_ms)
+        self.report_task_status(task_id, status, result, duration_ms, extra=extra)
 
     def report_task_status(self, task_id: str, status: str,
                            result: Any = None, duration_ms: float = 0,
                            extra: Optional[Dict[str, Any]] = None):
         """上报任务状态到 Master。
 
+        使用 gRPC 客户端的 ``send_websocket_message`` 将 TaskStatus（含
+        task_type / worker_id / duration_ms / result / extra 等扩展字段）
+        通过出站队列经 ``Communicate`` 双向流发送给 master。
+
         为避免在 worker 进程（非事件循环线程）调用 asyncio 相关 API
         而抛出 ``RuntimeError: There is no current event loop``，这里直接
         同步调用 ``send_websocket_message``——当前 gRPC 客户端实现也是
         同步方法。
         """
-        if self._central_client is None:
+        if self._grpc_client is None:
+            logger.warning(
+                "Cannot report task status: grpc_client not set (task_id=%s)",
+                task_id,
+            )
             return
 
         task = self._get_task(task_id)
         task_type = task.task_type if task else "unknown"
         execution_mode = task.execution_mode.value if task else "unknown"
+
+        # 截断 result 到合理长度，避免通过 gRPC 传输大对象。
+        # client.send_websocket_message 还会再截断到 1000，这里在调用前
+        # 先裁剪一次，便于日志与传输两侧都更可控。
+        if result is None:
+            result_str = None
+        else:
+            result_str = str(result)
+            if len(result_str) > 2000:
+                result_str = result_str[:2000]
 
         message = {
             "type": "task_status",
@@ -172,14 +191,14 @@ class TaskScheduler:
             "task_type": task_type,
             "execution_mode": execution_mode,
             "status": status,
-            "result": str(result) if result else None,
+            "result": result_str,
             "duration_ms": duration_ms,
             "timestamp": time.time(),
             "extra": extra or {},
         }
 
         try:
-            self._central_client.send_websocket_message(message)
+            self._grpc_client.send_websocket_message(message)
         except Exception as e:
             logger.error("Failed to report task status: %s", e)
 

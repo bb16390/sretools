@@ -1,8 +1,23 @@
-from typing import Annotated, Any, Literal, Optional, Union
+import time
+import uuid
+from typing import Annotated, Any, Dict, List, Literal, Optional, Union
 
+# 优先 orjson（spec 推荐），未安装时回退到标准库 json，保证模块可被 import。
+# spec 允许 ``orjson.loads`` 或 ``json.loads`` 二选一。
+try:
+    import orjson
+
+    _json_loads = orjson.loads
+except ImportError:  # pragma: no cover - 部署环境通常装了 orjson
+    import json
+
+    _json_loads = json.loads
+
+from apps.collector import jobs
 from apps.collector.models import CollectorTask, DataSource, Opsteam, Subsystem
+from common.transform_runner import apply_transform
 from core.globals import site
-from fastapi import Body
+from fastapi import Body, HTTPException
 from libs.fastapi_amis_admin import admin
 from libs.fastapi_amis_admin.admin import AdminAction, AdminApp
 from libs.fastapi_amis_admin.amis import (
@@ -24,6 +39,34 @@ from libs.fastapi_amis_admin.utils.pydantic import ModelField
 from sqlalchemy import event, select
 from sqlmodel.sql.expression import Select
 from starlette.requests import Request
+
+
+def _get_grpc_helpers():
+    """懒导入 ``grpc_server.server`` 的下发辅助函数。
+
+    master 运行时 ``master/`` 已在 ``sys.path`` 上，可直接 import；
+    若 gRPC 模块不可用（例如仅启动 HTTP 子集），返回 ``(None, None)``，
+    由调用方决定回退策略。apis.py 采用同样的懒导入模式。
+    """
+    try:
+        from grpc_server.server import get_servicer, list_workers  # type: ignore
+    except ImportError:
+        return None, None
+    return get_servicer, list_workers
+
+
+def _load_sql_adapter():
+    """懒导入 worker 端 ``SqlAdapter`` 供 master 本地预览回退使用。
+
+    master 启动时通常 ``/workspace`` 在 ``sys.path``，可直接
+    ``from worker.adapter.sql_adapter import SqlAdapter``；若 worker 包
+    不可用则返回 None，预览将无法走本地回退（需提供 worker_id）。
+    """
+    try:
+        from worker.adapter.sql_adapter import SqlAdapter  # type: ignore
+    except ImportError:
+        return None
+    return SqlAdapter
 
 
 @site.register_admin
@@ -467,6 +510,33 @@ class CollectorTaskAdmin(admin.ModelAdmin):
             ),
         )
 
+    async def on_create_pre(
+        self, request: Request, obj, **kwargs
+    ) -> Dict[str, Any]:
+        """创建任务前置校验：必须携带有效的 ``preview_token``。
+
+        从原始请求体读取 ``preview_token``，通过
+        ``jobs.consume_preview_token`` 校验：token 有效且 payload 中
+        ``success==True`` 才放行；否则抛 ``HTTPException(400)``，
+        fastapi_amis_admin 会将其包装为 ``BaseApiOut(status=-1)``。
+        校验通过后正常走默认创建流程，``transform_script`` 已在 schema
+        中，会随任务保存到 ``CollectorTask.transform_script``，供下发时
+        携带到 worker。本步骤不下发任务（下发由 dispatch 路由触发）。
+        """
+        token = ""
+        try:
+            body = await request.json()
+            if isinstance(body, dict):
+                token = body.get("preview_token", "") or ""
+        except Exception:  # noqa: BLE001
+            token = ""
+        payload = jobs.consume_preview_token(token) if token else None
+        if payload is None or not payload.get("success"):
+            raise HTTPException(
+                status_code=400, detail="preview required or preview failed"
+            )
+        return await super().on_create_pre(request, obj, **kwargs)
+
     def register_router(self):
         @self.router.post("/control/{item_id}", include_in_schema=True)
         async def control(
@@ -476,30 +546,281 @@ class CollectorTaskAdmin(admin.ModelAdmin):
         ): ...
 
         @self.router.post("/preview", include_in_schema=True)
-        async def preview(
-            form_type: str = "preview",
-            data: Annotated[self.schema_update, Body()] = None,
-        ):
-            import orjson
+        async def preview(form_type: str = "preview", payload: dict = Body(...)):
+            """采集任务预览：执行试采 + 应用 ``transform_script`` 转换 + 签发 preview_token。
 
-            data = self.schema_create(**data)
-            conf = orjson.loads(data.conf)
+            接受 AMIS schemaApi 提交的 JSON body（name / collector_type /
+            timeout / transform_script / status / conf / subsystem_id，
+            以及可选的 ``worker_id``）。返回::
 
-            src_db_ids = conf["src_database"].split(",")
+                {success, rows, raw_rows_count, rows_count, duration_ms,
+                 worker_id, preview_token}
+            或失败时::
 
-            stmt = select(DataSource.node, DataSource.description).where(
-                DataSource.id.in_(src_db_ids)
+                {success:false, error, duration_ms, error_kind}
+            """
+            conf_raw = payload.get("conf")
+            # conf 在 AMIS 提交时通常为 JSON 字符串；也兼容已解析的 dict
+            if isinstance(conf_raw, str):
+                try:
+                    conf = _json_loads(conf_raw) if conf_raw else {}
+                except Exception:
+                    return {
+                        "success": False,
+                        "error": "invalid conf json",
+                        "duration_ms": 0,
+                        "error_kind": "conf_error",
+                    }
+            elif isinstance(conf_raw, dict):
+                conf = conf_raw
+            elif conf_raw is None:
+                conf = {}
+            else:
+                return {
+                    "success": False,
+                    "error": "invalid conf json",
+                    "duration_ms": 0,
+                    "error_kind": "conf_error",
+                }
+
+            worker_id = payload.get("worker_id", "") or ""
+            transform_script = payload.get("transform_script", "") or ""
+            sql = conf.get("sql", "") or ""
+            is_trading_day = bool(
+                conf.get("is_trading_day", conf.get("trade_day_only", False))
             )
-            rows = await self.db.async_execute(stmt)
-            rows = rows.all()
 
-            src_databases = [n._asdict() for n in rows]
+            # 源数据源 ID 列表：优先 src_datasource（list[int]），回退 src_database
+            src_ids_raw = conf.get("src_datasource")
+            if src_ids_raw is None:
+                src_ids_raw = conf.get("src_database")
+            src_ids: List[int] = []
+            if isinstance(src_ids_raw, (list, tuple)):
+                src_ids = [int(i) for i in src_ids_raw if i not in (None, "")]
+            elif isinstance(src_ids_raw, str) and src_ids_raw.strip():
+                src_ids = [
+                    int(p)
+                    for p in src_ids_raw.split(",")
+                    if p.strip() not in ("", None)
+                ]
+            if not src_ids:
+                return {
+                    "success": False,
+                    "error": "no src_datasource configured",
+                    "duration_ms": 0,
+                    "error_kind": "conf_error",
+                }
 
-            preview_data = []
+            # 查询源数据源行（含 url / username / password 供本地试采）
+            ds_stmt = select(DataSource).where(DataSource.id.in_(src_ids))
+            ds_rows = (await self.db.async_execute(ds_stmt)).scalars().all()
+            if not ds_rows:
+                return {
+                    "success": False,
+                    "error": "src datasource not found",
+                    "duration_ms": 0,
+                    "error_kind": "conf_error",
+                }
 
-            for item in src_databases:
-                preview_data.append(item)
-            return preview_data
+            SqlAdapter = _load_sql_adapter()
+            if SqlAdapter is None:
+                return {
+                    "success": False,
+                    "error": "sql adapter unavailable on master; please provide a worker_id",
+                    "duration_ms": 0,
+                    "error_kind": "no_adapter",
+                }
+
+            if not sql:
+                return {
+                    "success": False,
+                    "error": "sql is empty",
+                    "duration_ms": 0,
+                    "error_kind": "conf_error",
+                }
+
+            start = time.time()
+            rows: Any = []
+            collect_error: Optional[str] = None
+            # 取第一个源数据源执行试采作为预览样例（spec：first is fine）。
+            # 即便请求体携带了 worker_id 且该 worker 在线，本实现也只做
+            # master 本地 SqlAdapter 一次性执行，不真正向 worker 推送长
+            # 周期任务，以保证预览原子、可回滚。worker_id 仅用于响应中
+            # 标记预期下发目标。
+            target_ds = ds_rows[0]
+            try:
+                adapter = SqlAdapter(url=target_ds.url)
+                rows = await adapter.execute(sql)
+                if not isinstance(rows, list):
+                    rows = list(rows) if rows is not None else []
+            except Exception as exc:  # noqa: BLE001
+                collect_error = str(exc)
+            duration_ms = int((time.time() - start) * 1000)
+
+            if collect_error is not None:
+                return {
+                    "success": False,
+                    "error": collect_error,
+                    "duration_ms": duration_ms,
+                    "error_kind": "collect_error",
+                }
+
+            raw_rows_count = len(rows) if isinstance(rows, list) else 0
+
+            # 应用 transform_script 转换
+            if transform_script:
+                ok, transformed, err_type = apply_transform(
+                    transform_script, rows, conf
+                )
+                if not ok:
+                    return {
+                        "success": False,
+                        "error": transformed,
+                        "duration_ms": duration_ms,
+                        "error_kind": err_type,
+                    }
+                rows = transformed
+                if isinstance(rows, list):
+                    rows_count = len(rows)
+                else:
+                    rows_count = raw_rows_count
+            else:
+                rows_count = raw_rows_count
+
+            preview_rows = rows[:10] if isinstance(rows, list) else rows
+            token = jobs.issue_preview_token(
+                {
+                    "success": True,
+                    "raw_rows_count": raw_rows_count,
+                    "rows_count": rows_count,
+                    "worker_id": worker_id,
+                    "conf_snapshot": conf,
+                    "transform_script": transform_script,
+                    "is_trading_day": is_trading_day,
+                }
+            )
+
+            return {
+                "success": True,
+                "rows": preview_rows,
+                "raw_rows_count": raw_rows_count,
+                "rows_count": rows_count,
+                "duration_ms": duration_ms,
+                "worker_id": worker_id,
+                "preview_token": token,
+            }
+
+        @self.router.post("/dispatch", include_in_schema=True)
+        async def dispatch(payload: dict = Body(...)):
+            """将采集任务下发到指定 worker。
+
+            请求体: ``{task_id, worker_id}``。校验 worker 在线后，从
+            ``CollectorTask`` + 关联 ``DataSource`` + ``conf`` 派生 worker
+            config，通过 gRPC ``push_task_update`` 推送
+            ``action="task_create"``，并回写 ``CollectorTask.worker_id`` 与
+            ``job_id``（master 分配的 UUID）。
+            """
+            task_id = payload.get("task_id")
+            worker_id = payload.get("worker_id")
+            if not task_id or not worker_id:
+                return BaseApiOut(status=-1, msg="task_id and worker_id required")
+
+            get_servicer, list_workers = _get_grpc_helpers()
+            if get_servicer is None or list_workers is None:
+                return BaseApiOut(status=-1, msg="gRPC server not started")
+            servicer = get_servicer()
+            if servicer is None:
+                return BaseApiOut(status=-1, msg="gRPC server not started")
+
+            try:
+                workers = list_workers()
+            except Exception as exc:  # noqa: BLE001
+                return BaseApiOut(status=-1, msg=f"list workers failed: {exc}")
+            online = any(
+                w.get("worker_id") == worker_id and w.get("status") == "online"
+                for w in (workers or [])
+            )
+            if not online:
+                return BaseApiOut(status=-1, msg="worker not found or offline")
+
+            # 使用独立 session 加载并更新任务，避免与请求作用域 session 事务状态耦合
+            async with self.db.session_maker() as sess:
+                task = (
+                    (
+                        await sess.execute(
+                            select(CollectorTask).where(
+                                CollectorTask.id == int(task_id)
+                            )
+                        )
+                    )
+                    .scalars()
+                    .first()
+                )
+                if task is None:
+                    return BaseApiOut(status=-1, msg="task not found")
+
+                ds_stmt = select(DataSource).where(
+                    DataSource.id == task.data_source_id
+                )
+                ds = (await sess.execute(ds_stmt)).scalars().first()
+                if ds is None:
+                    return BaseApiOut(status=-1, msg="data source not found")
+
+                # collector_type -> worker task_type
+                type_map = {
+                    0: "database_collector",
+                    1: "kafka_collector",
+                    2: "database_collector",
+                    3: "database_collector",
+                }
+                task_type = type_map.get(task.collector_type, "database_collector")
+
+                try:
+                    conf = _json_loads(task.conf) if task.conf else {}
+                except Exception:  # noqa: BLE001
+                    conf = {}
+
+                password_val = ""
+                if ds.password is not None:
+                    password_val = ds.password.get_secret_value()
+                worker_config = {
+                    "cron_expression": conf.get(
+                        "trigger_expr", "interval(seconds=60)"
+                    ),
+                    "adapter_type": "sql",
+                    "adapter_config": {
+                        "url": ds.url,
+                        "username": ds.username,
+                        "password": password_val,
+                    },
+                    "query": conf.get("sql", ""),
+                    "trade_day_only": bool(conf.get("is_trading_day", False)),
+                    "transform_script": task.transform_script or "",
+                    "timeout": task.timeout,
+                    "master_task_id": str(task.id),
+                }
+
+                job_id = str(uuid.uuid4())
+                ok = servicer.push_task_update(
+                    worker_id,
+                    {
+                        "task_id": str(task.id),
+                        "action": "task_create",
+                        "task_type": task_type,
+                        "config": worker_config,
+                        "timestamp": time.time(),
+                    },
+                )
+                if not ok:
+                    return BaseApiOut(
+                        status=-1, msg="failed to push task to worker"
+                    )
+
+                task.worker_id = worker_id
+                task.job_id = job_id
+                await sess.commit()
+
+            return BaseApiOut(data={"worker_id": worker_id, "job_id": job_id})
 
         return super().register_router()
 

@@ -166,6 +166,12 @@ message TaskStatus {
   string status = 2;
   string message = 3;
   double timestamp = 4;
+  // 扩展字段：worker 上报执行详情，供 master 回写 CollectorTask
+  string task_type = 5;
+  string worker_id = 6;
+  double duration_ms = 7;
+  string result = 8;             // 简短结果摘要（截断后）
+  map<string, string> extra = 9; // 承载 rows_count / transformed_rows / error_kind 等
 }
 
 // Ping message
@@ -183,10 +189,11 @@ message ConfigUpdate {
 // Task update
 message TaskUpdate {
   string task_id = 1;
-  string action = 2; // "create", "stop", "pause", "resume"
+  string action = 2;             // "create", "stop", "pause", "resume"
   string task_type = 3;
-  map<string, string> config = 4;
+  string config = 4;             // JSON 序列化后的复杂 config（替代原 map<string,string>）
   double timestamp = 5;
+  string worker_id = 6;          // 目标 worker 标识（master 下发时填充）
 }
 
 // Trade day data

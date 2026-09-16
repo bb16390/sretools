@@ -13,6 +13,7 @@
 
 - master 端：保留 `apps/collector/` 现有前端配置不动；新增后端逻辑实现：
   - 预览接口真正试采（通过 worker 执行一次查询，或 master 复用 worker adapter 本地执行）并返回样例数据
+  - **预览在试采后 SHALL 应用 `transform_script` 对样例数据进行转换，返回转换后的样例**（与正式任务行为一致）
   - 新建采集任务保存前置校验：必须最近一次预览成功
   - 预览成功后可选将任务下发到任意已注册 worker
   - 新增"已注册 worker 列表" HTTP 接口
@@ -22,6 +23,9 @@
   - `send_websocket_message` / `report_task_status` 真正通过 `Communicate` 双向流的 `WorkerMessage.task_status` 上报
   - 上报字段补齐：`worker_id`、`task_id`、`task_type`、`status`、`result`、`duration_ms`、`timestamp`、`extra`（含 `rows_count` 等）
   - 保留并复用 `TaskScheduler` 已有的 `task_create` / `task_stop` / `task_pause` / `task_resume` 指令处理
+  - **`DatabaseCollectorTask` / `KafkaCollectorTask` 等正式任务在每次执行采集后 SHALL 应用 `transform_script` 转换数据，再上报状态与 `extra.transformed_rows`**
+- 共享（master + worker）：
+  - 新增轻量 `transform_script` 执行器模块：将 `CollectorTask.transform_script`（Python 源码字符串）安全 exec 为 `transform(data, config) -> data` 可调用对象，供预览与正式任务复用，避免两端重复实现
 - 不改动：
   - `master/apps/collector/models.py` 中 `DataSource` / `CollectorTask` 字段定义（已含所需字段）
   - `master/apps/collector/admin.py` 中 DataSourceAdmin / CollectorTaskAdmin 表单字段、列表、操作按钮布局
@@ -34,11 +38,13 @@
 - Affected code:
   - `master/apps/collector/apis.py`（新增预览执行、worker 列表、任务下发路由）
   - `master/apps/collector/admin.py`（仅扩展 preview 路由实现 + 新增 dispatch 路由，不动表单结构）
-  - `master/apps/collector/jobs.py`（由空文件改造为 worker 状态回写 / worker 列表查询的 helper 模块）
+  - `master/apps/collector/jobs.py`（由空文件改造为 worker 状态回写 / worker 列表查询 / `preview_token` 签发缓存 / transform_script 执行的 helper 模块）
   - `master/grpc_server/server.py`（按 worker_id 索引活跃流；新增 master→worker 推送 TaskUpdate 的方法；处理入站 task_status 并回写 CollectorTask）
   - `worker/grpc/client.py`（`send_websocket_message` 改为通过出站队列异步发送 `WorkerMessage.task_status`；Communicate 的 `message_generator` 改为消费队列）
   - `worker/scheduler/task_scheduler.py`（`report_task_status` 字段补齐 + 通过 grpc_client 出站队列上报）
+  - `worker/scheduler/tasks/database_collector_task.py` 与 `worker/scheduler/tasks/kafka_collector_task.py`（在采集后调用共享 `transform_script` 执行器转换数据，再上报状态）
   - `protos/worker.proto`（扩展 `TaskStatus` 与 `TaskUpdate` 消息字段，并重新生成 `worker_pb2*.py`）
+  - 新增共享模块 `common/transform_runner.py`（或 `worker/transformer/runner.py` + master 端复用）：实现 `apply_transform(script_src, data, config)` 安全 exec + 转换调用契约
 
 ## ADDED Requirements
 
@@ -51,19 +57,26 @@
 - **AND** `master/apps/collector/admin.py` 中 DataSourceAdmin / CollectorTaskAdmin 的 `page_schema` / `list_display` / `create_exclude` / `update_exclude` / `read_fields` / `admin_action_maker` 等结构保持不变
 - **AND** AMIS `FieldSet(conf)` 表单项（交易日、触发表达式、源数据库、SQL、目标数据库、目标表、数据键值）保持不变
 
-### Requirement: 预览试采
-系统 SHALL 在 master 端的 `POST /admin/collector/CollectorTaskAdmin/preview` 路由中真正执行一次试采，返回样例数据与执行结果，而不是仅返回源数据库列表。试采方式 SHALL 优先选择已注册 worker 执行（在请求体可选 `worker_id` 字段时），无可用 worker 时回退到 master 本地复用 `worker.adapter.sql_adapter.SqlAdapter` 等执行。
+### Requirement: 预览试采（含 transform_script 转换）
+系统 SHALL 在 master 端的 `POST /admin/collector/CollectorTaskAdmin/preview` 路由中真正执行一次试采，返回样例数据与执行结果，而不是仅返回源数据库列表。试采方式 SHALL 优先选择已注册 worker 执行（在请求体可选 `worker_id` 字段时），无可用 worker 时回退到 master 本地复用 `worker.adapter.sql_adapter.SqlAdapter` 等执行。试采完成后 SHALL 应用请求体中携带的 `transform_script`（Python 源码字符串）对样例数据进行转换，返回转换后的样例——以与正式任务执行行为保持一致。
 
-#### Scenario: 预览成功
+#### Scenario: 预览成功（含转换）
 - **WHEN** 用户在创建/编辑采集任务对话框中点击"预览"按钮，提交包含 `name` / `collector_type` / `timeout` / `transform_script` / `status` / `conf`（含 `src_datasource`、`sql`、`trigger_expr` 等）的请求体
-- **AND** 试采查询返回 N 行数据（N ≥ 0），无异常
-- **THEN** 响应体 SHALL 包含：`success: true`、`rows`（最多 10 条样例）、`rows_count`、`duration_ms`、`worker_id`（实际执行方）、`preview_token`（用于后续 create 校验）
-- **AND** master SHALL 在内存/缓存中保留 `preview_token` 对应的预览结果（30 分钟有效期），供后续 create 接口校验
+- **AND** 试采查询返回 N 行原始数据（N ≥ 0），无异常
+- **AND** 请求体 `transform_script` 非空时，对该 N 行数据应用 `transform_script` 转换
+- **THEN** 响应体 SHALL 包含：`success: true`、`rows`（最多 10 条**转换后**的样例；未提供 `transform_script` 时为原始行）、`raw_rows_count`（转换前行数）、`rows_count`（转换后行数）、`duration_ms`（含采集 + 转换耗时）、`worker_id`（实际执行方）、`preview_token`（用于后续 create 校验）
+- **AND** master SHALL 在内存/缓存中保留 `preview_token` 对应的预览结果（30 分钟有效期），含原始样例与转换后样例，供后续 create 接口校验
 
-#### Scenario: 预览失败
-- **WHEN** 试采查询抛出异常（连接失败、SQL 语法错误、超时等）
-- **THEN** 响应体 SHALL 包含：`success: false`、`error`（错误类型与消息）、`duration_ms`
+#### Scenario: 预览失败（采集或转换异常）
+- **WHEN** 试采查询抛出异常（连接失败、SQL 语法错误、超时等），或 `transform_script` 在 exec/调用阶段抛出异常（语法错误、运行时错误等）
+- **THEN** 响应体 SHALL 包含：`success: false`、`error`（错误类型与消息，含 `transform_error` 标识以区分采集失败与转换失败）、`duration_ms`
 - **AND** 不签发 `preview_token`
+
+#### Scenario: transform_script 安全 exec
+- **WHEN** master 或 worker 需要执行 `transform_script`
+- **THEN** 系统 SHALL 在受限命名空间中 `exec` 该 Python 源码字符串，从中获取名为 `transform` 的可调用对象（签名 `transform(data, config) -> Any`）
+- **AND** 限制可访问的内置函数（禁用 `open` / `eval` / `exec` / `__import__` 等危险项，仅保留 `len` / `str` / `int` / `float` / `list` / `dict` / `range` 等基础函数）
+- **AND** 执行异常时捕获并返回结构化错误，不污染调用方上下文
 
 ### Requirement: 新建任务必须预览成功
 系统 SHALL 强制要求新建采集任务在 `POST /admin/collector/CollectorTaskAdmin/item` 提交前，最近一次预览成功。校验通过请求体中携带 `preview_token` 实现；未携带或 `preview_token` 无效/过期时拒绝创建。
@@ -160,6 +173,26 @@
 #### Scenario: 队列非阻塞入队
 - **WHEN** worker 子线程/子进程并发上报状态
 - **THEN** 入队操作 SHALL 线程安全且非阻塞（使用 `queue.Queue` 或 `collections.deque` + 锁），队列满时丢弃最旧消息并记日志，避免任务执行线程被阻塞
+
+### Requirement: 正式任务执行 transform_script 转换数据
+系统 SHALL 在 worker 端的 `DatabaseCollectorTask` / `KafkaCollectorTask` 等正式任务执行流程中，每次完成采集（执行 SQL / 消费 Kafka 消息）后、上报状态前，应用任务配置中携带的 `transform_script` 对采集结果进行转换。转换逻辑 SHALL 复用 master / worker 共享的 `transform_script` 执行器，确保与预览阶段转换行为一致。
+
+#### Scenario: 任务执行成功并应用 transform_script
+- **WHEN** `DatabaseCollectorTask` 按 cron 表达式触发执行，SQL 查询返回 N 行原始数据
+- **AND** 任务 config 中携带 `transform_script`（非空 Python 源码字符串）
+- **THEN** worker SHALL 调用共享执行器加载 `transform_script`，对 N 行原始数据调用 `transform(data, config)` 获得转换后数据
+- **AND** 上报 `TaskStatus` 时 `status == "success"`、`extra.transformed_rows` 含转换后行数（或样例前 3 行）、`extra.raw_rows_count` 含原始行数
+- **AND** 转换异常时上报 `status == "failed"`、`extra.error_kind == "transform_error"`、`message` 含异常信息，但采集部分已成功（避免丢失采集数据，可在 extra 中携带原始行数）
+
+#### Scenario: 未配置 transform_script 的任务
+- **WHEN** 任务 config 中 `transform_script` 为空或未提供
+- **THEN** worker SHALL 跳过转换步骤，直接上报采集原始数据
+- **AND** `extra.transformed_rows` 不存在或与 `extra.raw_rows_count` 相同
+
+#### Scenario: 共享 transform_script 执行器
+- **WHEN** master 预览阶段或 worker 正式任务阶段需要执行 `transform_script`
+- **THEN** 系统 SHALL 使用同一份执行器实现（位于 master 与 worker 共享的模块路径，或在两端分别提供相同接口契约的轻量实现）
+- **AND** 执行器接口契约：`apply_transform(script_src: str, data: Any, config: dict) -> tuple[bool, Any, Optional[str]]`，返回 `(是否成功, 转换后数据或错误信息, 错误类型)`
 
 ## MODIFIED Requirements
 

@@ -6,6 +6,7 @@ from typing import Any, Dict, List
 
 from croniter import croniter
 
+from common.transform_runner import apply_transform
 from worker.adapter.base import AdapterManager
 from worker.scheduler.base_task import BaseTask, ExecutionMode, TaskStatus
 
@@ -135,11 +136,51 @@ class DatabaseCollectorTask(BaseTask):
 
                         data = results[0] if len(results) == 1 else results
 
+                        # 采集成功：计算 raw_rows_count 并（可选）应用 transform_script
+                        raw_rows_count = len(data) if isinstance(data, list) else 1
+                        extra: Dict[str, str] = {"raw_rows_count": str(raw_rows_count)}
+
+                        transform_script = self.config.get("transform_script", "")
+                        # transform 失败信息：(错误消息, 错误类型)；非空时跳过 success 上报
+                        transform_failed = None
+                        if transform_script:
+                            ok, transformed, err_type = apply_transform(
+                                transform_script, data, self.config
+                            )
+                            if not ok:
+                                transform_failed = (transformed, err_type)
+                            else:
+                                data = transformed
+                                if isinstance(transformed, list):
+                                    extra["transformed_rows"] = str(len(transformed))
+                                else:
+                                    extra["transformed_rows"] = str(raw_rows_count)
+
                         duration_ms = (time.time() - start_time) * 1000
-                        self._notify_status("success", result=data, duration_ms=duration_ms)
-                        logger.info(
-                            f"DatabaseCollectorTask[{self.task_id}] query executed successfully. Duration: {duration_ms:.02f}ms",
-                        )
+                        if transform_failed is not None:
+                            # 转换失败：上报 failed，保留 raw_rows_count，附加 error_kind
+                            err_msg, err_type = transform_failed
+                            extra["error_kind"] = "transform_error"
+                            self._notify_status(
+                                "failed",
+                                result=f"transform error: {err_msg}",
+                                duration_ms=duration_ms,
+                                extra=extra,
+                            )
+                            logger.error(
+                                "DatabaseCollectorTask[%s] transform failed: %s (%s)",
+                                self.task_id, err_msg, err_type,
+                            )
+                        else:
+                            self._notify_status(
+                                "success",
+                                result=data,
+                                duration_ms=duration_ms,
+                                extra=extra,
+                            )
+                            logger.info(
+                                f"DatabaseCollectorTask[{self.task_id}] query executed successfully. Duration: {duration_ms:.02f}ms",
+                            )
                     except Exception as e:
                         duration_ms = (time.time() - start_time) * 1000
                         self._notify_status("failed", result=str(e), duration_ms=duration_ms)

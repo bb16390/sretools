@@ -61,8 +61,19 @@ class BaseTask(ABC):
         """设置状态上报回调函数"""
         self._status_callback = callback
 
-    def _notify_status(self, status: str, result: Any = None, duration_ms: float = 0):
-        """通知调度器上报任务状态"""
+    def _notify_status(
+        self,
+        status: str,
+        result: Any = None,
+        duration_ms: float = 0,
+        extra: Optional[Dict[str, Any]] = None,
+    ):
+        """通知调度器上报任务状态
+
+        Args:
+            extra: 可选的扩展字段 dict，会原样透传给 report_task_status，
+                最终进入 TaskStatus.extra map（如 raw_rows_count / transformed_rows）。
+        """
         if self._status_callback:
             self._status_callback(
                 task_id=self.task_id,
@@ -70,6 +81,7 @@ class BaseTask(ABC):
                 status=status,
                 result=result,
                 duration_ms=duration_ms,
+                extra=extra,
             )
 
     @abstractmethod

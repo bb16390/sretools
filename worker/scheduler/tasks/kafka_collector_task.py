@@ -9,6 +9,7 @@ from worker.adapter.base import AdapterManager
 from worker.scheduler.base_task import BaseTask, ExecutionMode, TaskStatus
 from worker.transformer.executor import TransformExecutor
 from worker.core.settings import settings
+from common.transform_runner import apply_transform
 
 logger = logging.getLogger(__name__)
 
@@ -178,14 +179,53 @@ class KafkaCollectorTask(BaseTask):
                                 )
                             )
 
+                        # 应用 transform_script（共享执行器），在 transform_task_id 之后
+                        raw_count = len(messages) if isinstance(messages, list) else 1
+                        extra: Dict[str, str] = {"raw_rows_count": str(raw_count)}
+                        transform_script = self.config.get("transform_script", "")
+                        # transform 失败信息：(错误消息, 错误类型)；非空时跳过 success 上报
+                        transform_failed = None
+                        if transform_script:
+                            ok, transformed, err_type = apply_transform(
+                                transform_script, processed_data, self.config
+                            )
+                            if not ok:
+                                transform_failed = (transformed, err_type)
+                            else:
+                                processed_data = transformed
+                                if isinstance(transformed, list):
+                                    extra["transformed_rows"] = str(len(transformed))
+                                else:
+                                    extra["transformed_rows"] = str(raw_count)
+
+                        # 始终累积已消费消息以供后续 offset 提交（即使转换失败）
                         processed_messages.extend(messages)
 
                         duration_ms = (time.time() - start_time) * 1000
-                        self._notify_status("success", result=processed_data, duration_ms=duration_ms)
-                        logger.debug(
-                            "KafkaCollectorTask[%s] processed %d messages. Duration: %.2fms",
-                            self.task_id, len(messages), duration_ms,
-                        )
+                        if transform_failed is not None:
+                            err_msg, err_type = transform_failed
+                            extra["error_kind"] = "transform_error"
+                            self._notify_status(
+                                "failed",
+                                result=f"transform error: {err_msg}",
+                                duration_ms=duration_ms,
+                                extra=extra,
+                            )
+                            logger.error(
+                                "KafkaCollectorTask[%s] transform failed: %s (%s)",
+                                self.task_id, err_msg, err_type,
+                            )
+                        else:
+                            self._notify_status(
+                                "success",
+                                result=processed_data,
+                                duration_ms=duration_ms,
+                                extra=extra,
+                            )
+                            logger.debug(
+                                "KafkaCollectorTask[%s] processed %d messages. Duration: %.2fms",
+                                self.task_id, len(messages), duration_ms,
+                            )
 
                     current_time = time.time()
                     if (current_time - last_commit_time) >= commit_interval and processed_messages:
