@@ -4,7 +4,6 @@ import grpc
 import warnings
 
 from . import worker_pb2 as worker__pb2
-
 GRPC_GENERATED_VERSION = '1.81.0'
 GRPC_VERSION = grpc.__version__
 _version_not_supported = False

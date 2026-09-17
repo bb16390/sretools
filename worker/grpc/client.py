@@ -8,6 +8,7 @@ import threading
 import os
 import json
 import logging
+import queue
 from typing import Dict, Any, List, Optional, Callable
 from urllib.parse import urlparse
 
@@ -57,6 +58,27 @@ def _normalize_grpc_address(raw: str) -> str:
         # 默认 gRPC 端口
         port = 50051
     return f"{host}:{port}"
+
+
+def _parse_task_config(config: Any) -> Dict[str, Any]:
+    """解析 ``TaskUpdate.config`` 字段。
+
+    proto 中 ``config`` 已由 ``map<string,string>`` 改为 ``string``（承载
+    JSON 序列化后的复杂 config）。空字符串或解析失败时回退为空 dict，
+    避免阻塞下游 ``create_task`` 流程。
+    """
+    if not config:
+        return {}
+    if isinstance(config, dict):
+        # 兼容旧 map 字段残留或本地直传场景
+        return dict(config)
+    try:
+        parsed = json.loads(config)
+        if isinstance(parsed, dict):
+            return parsed
+    except (TypeError, ValueError) as exc:
+        logger.warning("Failed to parse task_update config as JSON: %s", exc)
+    return {}
 
 
 def _collect_grpc_addresses() -> List[str]:
@@ -117,6 +139,10 @@ class CentralGrpcClient:
         self._communicate_running = False
         self._communicate_response_iterator = None
         self._communicate_lock = threading.Lock()
+
+        # 出站消息队列：累积 task_status 等 WorkerMessage，由 communicate 流线程消费发送
+        # 队列满时丢弃最旧消息（见 _enqueue_outbound），断线期间入队仍成功，重连后发送。
+        self._outbound_queue: "queue.Queue[Optional[worker_pb2.WorkerMessage]]" = queue.Queue(maxsize=1000)
 
         # Heartbeat thread
         self._heartbeat_thread = None
@@ -470,6 +496,34 @@ class CentralGrpcClient:
             logger.warning(f"Error getting Kafka offsets: {e}")
             return None
     
+    def _enqueue_outbound(self, msg: worker_pb2.WorkerMessage) -> bool:
+        """线程安全的非阻塞入队；队列满时丢弃最旧消息并记 warning。
+
+        入队成功即返回 True（即使为腾出空间丢弃了旧消息）。该方法不依赖
+        ``_connected`` 状态：流断开时入队仍成功，下次重连后队列中累积的消息
+        会被 ``_start_communicate_stream`` 消费发送。
+        """
+        try:
+            self._outbound_queue.put_nowait(msg)
+            return True
+        except queue.Full:
+            try:
+                dropped = self._outbound_queue.get_nowait()
+                logger.warning(
+                    "Outbound queue full; dropped oldest message to make room: %r",
+                    dropped,
+                )
+            except queue.Empty:
+                pass
+            try:
+                self._outbound_queue.put_nowait(msg)
+            except queue.Full:
+                logger.error(
+                    "Outbound queue still full after eviction; message dropped: %r",
+                    msg,
+                )
+            return True
+
     def _start_communicate_stream(self):
         """Internal method to run the bidirectional stream."""
         backoff = 1
@@ -483,12 +537,22 @@ class CentralGrpcClient:
                 def message_generator():
                     ping_seq = 1
                     while self._communicate_running and self._connected:
-                        ping = worker_pb2.Ping(sequence=ping_seq, timestamp=time.time())
-                        yield worker_pb2.WorkerMessage(ping=ping)
-                        ping_seq += 1
-                        time.sleep(30)
+                        try:
+                            msg = self._outbound_queue.get(timeout=30)
+                        except queue.Empty:
+                            # 30 秒内无出站消息，发送 Ping 心跳保持流活跃
+                            ping = worker_pb2.Ping(sequence=ping_seq, timestamp=time.time())
+                            yield worker_pb2.WorkerMessage(ping=ping)
+                            ping_seq += 1
+                            continue
+                        # 取到出站消息（task_status 等），原样发送
+                        if msg is not None:
+                            yield msg
 
-                responses = self.stub.Communicate(message_generator())
+                responses = self.stub.Communicate(
+                    message_generator(),
+                    metadata=(("worker_id", settings.worker_id),),
+                )
                 self._communicate_response_iterator = responses
                 backoff = 1
 
@@ -511,7 +575,7 @@ class CentralGrpcClient:
                             "action": master_msg.task_update.action,
                             "task_id": master_msg.task_update.task_id,
                             "task_type": master_msg.task_update.task_type,
-                            "config": dict(master_msg.task_update.config),
+                            "config": _parse_task_config(master_msg.task_update.config),
                         }
                         handler = self._message_handlers.get("task_update")
                         if handler is not None:
@@ -598,9 +662,41 @@ class CentralGrpcClient:
             self._trade_day_cache.update_trade_days_from_data(data)
 
     def send_websocket_message(self, message: Dict[str, Any]) -> bool:
-        """Compatibility method for sending messages (uses gRPC stream)."""
-        # For now, just log the message - in a real implementation we'd use the bidirectional stream
-        logger.debug("Would send message: %s", message)
+        """通过出站队列将 task_status 等消息上报给 master。
+
+        将入参 dict 解析为 ``worker_pb2.TaskStatus``，包装为 ``WorkerMessage`` 后入队。
+        入队即返回 True：即使当前未连接，下次重连后队列中累积的消息也会被发送。
+        非 task_status 类型的消息被忽略（仅记 debug 日志）。
+        """
+        msg_type = message.get("type")
+        if msg_type != "task_status":
+            logger.debug("Ignoring non-task_status message type=%s", msg_type)
+            return True
+
+        result_raw = message.get("result", "")
+        result_str = str(result_raw) if result_raw is not None else ""
+        if len(result_str) > 1000:
+            result_str = result_str[:1000]
+
+        extra_raw = message.get("extra")
+        if not isinstance(extra_raw, dict):
+            extra_raw = {}
+        extra_map = {str(k): str(v) for k, v in extra_raw.items()}
+
+        task_status_msg = worker_pb2.TaskStatus(
+            task_id=str(message.get("task_id", "")),
+            status=str(message.get("status", "")),
+            message="",
+            timestamp=float(message.get("timestamp") or time.time()),
+            task_type=str(message.get("task_type", "")),
+            worker_id=str(message.get("worker_id", settings.worker_id)),
+            duration_ms=float(message.get("duration_ms", 0) or 0),
+            result=result_str,
+            extra=extra_map,
+        )
+
+        worker_msg = worker_pb2.WorkerMessage(task_status=task_status_msg)
+        self._enqueue_outbound(worker_msg)
         return True
 
 

@@ -1,0 +1,27 @@
+- [x] master `apps/collector/models.py` 中 `DataSource` / `CollectorTask` 字段定义未修改（前后端联动改造前后字段集合与类型一致）
+- [x] master `apps/collector/admin.py` 中 DataSourceAdmin / CollectorTaskAdmin 的 `page_schema` / `list_display` / `create_exclude` / `update_exclude` / `read_fields` / `admin_action_maker` 等 AMIS 前端配置结构未修改
+- [x] `master/apps/collector/admin.py` 中 `FieldSet(conf)` 内的表单项（交易日、触发表达式、源数据库、SQL、目标数据库、目标表、数据键值）保持不变
+- [x] `protos/worker.proto` 中 `TaskStatus` 与 `TaskUpdate` 消息已按 spec 扩展字段（task_type / worker_id / duration_ms / result / extra 等）
+- [x] `master/grpc_server/worker_pb2*.py` 与 `worker/grpc/worker_pb2*.py` 已通过 `scripts/generate_grpc_code.py` 重新生成且两端可正常 import
+- [x] `master/grpc_server/server.py` 的 `Communicate` 已按真实 `worker_id` 索引活跃流（不再使用 `stream-worker-<timestamp>` 占位）
+- [x] `master/grpc_server/server.py` 已实现 `push_task_update(worker_id, task_update_dict) -> bool`，可向指定 worker 推送 `MasterMessage(task_update=...)`
+- [x] `master/grpc_server/server.py` 收到 `WorkerMessage.task_status` 后能正确定位 `CollectorTask` 并回写 `exec_status` / `last_run_*` / `total_*` 字段
+- [x] master 新增 `GET /api/collector/workers` 路由，返回已注册 worker 列表（worker_id / host / port / status / last_heartbeat）
+- [x] 新增共享 transform_script 执行器模块（`common/transform_runner.py` 或 `worker/transformer/runner.py`），实现 `apply_transform(script_src, data, config) -> tuple[bool, Any, Optional[str]]`
+- [x] 共享执行器已限制 `__builtins__`，禁用 `open` / `eval` / `exec` / `__import__` / `compile` 等危险项
+- [x] 共享执行器单元测试通过：常见转换（filter 行、字段重命名、聚合）正常 + 危险调用（`open`）被拒绝
+- [x] master `POST /admin/collector/CollectorTaskAdmin/preview` 真正执行试采并应用 `transform_script` 转换，返回 `{success, rows, raw_rows_count, rows_count, duration_ms, worker_id, preview_token}` 或 `{success:false, error, duration_ms, error_kind}`
+- [x] master `POST /admin/collector/CollectorTaskAdmin/item` 创建任务时强制校验 `preview_token`，无效或预览失败时返回 `BaseApiOut(status=-1, msg="preview required or preview failed")`
+- [x] master `POST /admin/collector/CollectorTaskAdmin/dispatch` 路由可将任务下发到指定 worker：校验 worker 在线、推送 TaskUpdate（含 transform_script）、回写 `CollectorTask.worker_id` 与 `job_id`
+- [x] worker 端 `worker/grpc/client.py` 的 `send_websocket_message` 通过出站队列将 `WorkerMessage(task_status=...)` 经 `Communicate` 双向流发送给 master
+- [x] worker 端出站队列为线程安全的非阻塞队列，队列满时丢弃最旧消息并记日志，不阻塞任务执行线程
+- [x] worker 端 `worker/scheduler/task_scheduler.py` 的 `report_task_status` 上报字段包含 `task_id` / `status` / `message` / `timestamp` / `task_type` / `worker_id` / `duration_ms` / `result` / `extra`
+- [x] worker `DatabaseCollectorTask` / `KafkaCollectorTask` 在采集成功后应用 `transform_script` 转换数据，转换后数据行数通过 `extra.transformed_rows` 上报
+- [x] worker 正式任务未配置 `transform_script` 时跳过转换步骤，`extra` 中不出现 `transformed_rows` 或与 `raw_rows_count` 一致
+- [x] worker 正式任务转换异常时上报 `status="failed"` + `extra.error_kind="transform_error"`，但仍保留采集已成功的 `extra.raw_rows_count`
+- [x] 端到端验证：创建任务 → 预览成功（含 transform_script 转换） → 携带 preview_token 创建 → 下发到 worker → worker 执行（含 transform_script 转换） → master `CollectorTask` 的 `last_run_status` / `total_run_count` 字段被回写
+- [x] 端到端验证：不带 preview_token 创建任务被拒绝（返回 status=-1）
+- [x] 端到端验证：下发到不存在的 worker 时返回 `BaseApiOut(status=-1, msg="worker not found or offline")`
+- [x] 端到端验证：`transform_script` 为空时预览与正式任务均正常执行（无转换步骤）
+- [x] 端到端验证：危险 `transform_script`（含 `open(...)`）在预览与正式任务中均被拒绝并返回结构化错误
+- [x] `master/apps/_collector/`（独立 APScheduler 模块）未被本联动改造影响
