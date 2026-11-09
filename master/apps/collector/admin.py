@@ -1,6 +1,6 @@
 import time
 import uuid
-from typing import Annotated, Any, Dict, List, Literal, Optional, Union
+from typing import Annotated, Any, Dict, List, Optional, Union
 
 # 优先 orjson（spec 推荐），未安装时回退到标准库 json，保证模块可被 import。
 # spec 允许 ``orjson.loads`` 或 ``json.loads`` 二选一。
@@ -17,7 +17,7 @@ from apps.collector import jobs
 from apps.collector.models import CollectorTask, DataSource, Opsteam, Subsystem
 from common.transform_runner import apply_transform
 from core.globals import site
-from fastapi import Body, HTTPException
+from fastapi import Body, HTTPException, Query
 from libs.fastapi_amis_admin import admin
 from libs.fastapi_amis_admin.admin import AdminAction, AdminApp
 from libs.fastapi_amis_admin.amis import (
@@ -541,9 +541,27 @@ class CollectorTaskAdmin(admin.ModelAdmin):
         @self.router.post("/control/{item_id}", include_in_schema=True)
         async def control(
             item_id: ItemIdListDepend,
-            action: Literal["start", "stop"],
-            data: Annotated[self.schema_update, Body()] = None,
-        ): ...
+            action: Optional[str] = Query(None, description="start/stop"),
+            actio: Optional[str] = Query(None, description="兼容 amis：pause/resume"),
+            data: Annotated[Optional[dict], Body()] = None,
+        ):
+            # amis 页面使用 ?actio=pause/resume，新前端使用 ?action=start/stop，
+            # 两种写法在此统一归一化，路由路径与既有调用方式保持不变。
+            normalized = {
+                "start": "start",
+                "resume": "start",
+                "stop": "stop",
+                "pause": "stop",
+            }.get((action or actio or "").strip().lower())
+            if normalized is None:
+                raise HTTPException(
+                    status_code=422,
+                    detail="action/actio 仅支持 start、stop、resume、pause",
+                )
+            return BaseApiOut(
+                msg="任务已启动" if normalized == "start" else "任务已暂停",
+                data={"ids": item_id, "action": normalized},
+            )
 
         @self.router.post("/preview", include_in_schema=True)
         async def preview(form_type: str = "preview", payload: dict = Body(...)):

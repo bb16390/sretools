@@ -1,4 +1,5 @@
 from datetime import datetime
+from uuid import uuid4
 
 from libs.fastapi_amis_admin.amis import (
     Editor,
@@ -154,9 +155,13 @@ class CollectorTask(PkMixin, table=True):
         max_length=128,
         amis_form_item="input-password",
     )
-    job_id: str = Field(nullable=False, title="任务ID")
-    worker_id: str = Field(nullable=False, title="工作节点")
-    last_run_time: str = Field(nullable=False, title="上次执行时间")
+    # 运行期字段：创建时不出现在表单中，但数据库列为 NOT NULL，
+    # 因此提供 Python 侧默认值，避免新建任务时触发 IntegrityError。
+    job_id: str = Field(
+        default_factory=lambda: uuid4().hex, nullable=False, title="任务ID"
+    )
+    worker_id: str = Field(default="", nullable=False, title="工作节点")
+    last_run_time: str = Field(default="", nullable=False, title="上次执行时间")
     last_run_status: int = Field(
         ExecStatus.running, nullable=False, title="上次执行状态"
     )
@@ -165,7 +170,7 @@ class CollectorTask(PkMixin, table=True):
     total_failed_count: int = Field(0, nullable=False, title="总失败次数")
     timeout: int = Field(30, nullable=False, title="超时时间（秒）")
     transform_script: str = Field(
-        default=None,
+        default="",
         nullable=False,
         title="转换脚本",
         amis_form_item=Editor(language="python"),

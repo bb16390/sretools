@@ -15,6 +15,7 @@ import os
 import sys
 import threading
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 
 # ---------------------------------------------------------------------------
@@ -87,9 +88,17 @@ from fastapi.openapi.docs import (
 )
 from fastapi.staticfiles import StaticFiles
 from index.admin import NavPageAdmin
-from index.file_upload_admin import FileUploadApp
+from index.file_upload_admin import FileUploadAdmin, FileUploadApp
+from libs.fastapi_amis_admin.admin import (
+    AdminApp,
+    DocsAdmin,
+    HomeAdmin,
+    ModelAdmin,
+    ReDocsAdmin,
+)
 from libs.fastapi_amis_admin.crud.schema import BaseApiOut
 from sqlmodel import SQLModel
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.cors import CORSMiddleware
 from starlette.responses import RedirectResponse
 
@@ -136,6 +145,38 @@ async def lifespan(app: FastAPI):
             "u:admin", site.unique_id, "page", "page", "allow"
         )
         logger.info("管理员权限策略添加完成")
+
+    # 为 admin 账号补齐页面操作权限：列表接口要求 page:list，
+    # 数据页面的新增/修改/删除分别要求 page:create/update/delete。
+    def _iter_admin_pages(group):
+        for child in group:
+            yield child
+            if isinstance(child, AdminApp):
+                yield from _iter_admin_pages(child)
+
+    added_page_policies = 0
+    for page in _iter_admin_pages(site):
+        actions = ["page:list"]
+        if isinstance(page, ModelAdmin):
+            # page:read 用于单条详情；page 动作用于 amis 菜单展示与页面访问。
+            actions += [
+                "page:read",
+                "page:create",
+                "page:update",
+                "page:delete",
+                "page",
+            ]
+        elif isinstance(page, (HomeAdmin, FileUploadAdmin, DocsAdmin, ReDocsAdmin)):
+            # 首页、文件上传、API 文档为只读页面，仅需 page 动作即可展示和访问。
+            actions.append("page")
+        for action in actions:
+            if not auth.enforcer.enforce("u:admin", page.unique_id, action, "page"):
+                await auth.enforcer.add_policy(
+                    "u:admin", page.unique_id, action, "page", "allow"
+                )
+                added_page_policies += 1
+    if added_page_policies:
+        logger.info(f"管理员页面权限已补充 {added_page_policies} 条")
 
     # 添加 gRPC 相关导入（使用绝对包导入，避免遮蔽第三方 grpcio）
     try:
@@ -236,6 +277,34 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# ---------------------------------------------------------------------------
+# Vue 3 管理台静态托管
+# 仅占用 /web，且挂载在最后，不影响 /admin、/api、/static、/mcp、
+# /docs、/redoc、/openapi.json 等既有路由。
+# ---------------------------------------------------------------------------
+class SPAStaticFiles(StaticFiles):
+    """history 模式下把未命中的页面路径回退到 index.html。"""
+
+    async def get_response(self, path: str, scope):
+        try:
+            response = await super().get_response(path, scope)
+        except StarletteHTTPException as exc:
+            if exc.status_code != 404 or Path(path).suffix:
+                raise
+            return await super().get_response("index.html", scope)
+        if response.status_code == 404 and not Path(path).suffix:
+            return await super().get_response("index.html", scope)
+        return response
+
+
+_web_dist = Path(PROJECT_ROOT) / "web" / "dist"
+if _web_dist.is_dir():
+    app.mount("/web", SPAStaticFiles(directory=_web_dist, html=True), name="web")
+    logger.info("Vue 管理台已挂载至 /web")
+else:
+    logger.info("web/dist 不存在，跳过 /web 静态托管")
 
 if __name__ == "__main__":
     import uvicorn
